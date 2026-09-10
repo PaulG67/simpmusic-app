@@ -1,0 +1,27 @@
+services:
+  simpmusic-app:
+    build: .
+    container_name: simpmusic-app
+    ports:
+      - "5060:5060"
+    volumes:
+      - ./config:/config
+      - ./cache:/cache
+      - ./logs:/logs
+    environment:
+      SUBSONIC_USER: simpmusic
+      SUBSONIC_PASSWORD: changeme
+      YTM_LANGUAGE: de
+      YTM_LOCATION: CH
+      SERVER_URL: ""
+      SPONSORBLOCK: "true"
+      RETURN_YOUTUBE_DISLIKE: "true"
+      TRANSLATE_PROVIDER: none
+      TRANSLATE_URL: ""
+      TRANSLATE_API_KEY: ""
+      TRANSLATE_MODEL: gpt-4o-mini
+      TRANSLATE_TARGET: ""
+    # yt-dlp spawns Deno to solve YouTube's JS challenges; it gets OOM-killed
+    # below roughly 512 MB, which shows up as "Signature solving failed".
+    mem_limit: 2g
+    restart: unless-stopped

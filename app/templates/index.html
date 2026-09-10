@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>SimpMusic</title>
+
+  <meta name="theme-color" content="#0d0f14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SimpMusic">
+  <meta name="referrer" content="no-referrer">
+
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v={{ version }}">
+</head>
+<body>
+
+<div id="login" class="login" hidden>
+  <div class="login-card">
+    <img src="/static/icons/icon.svg" alt="" width="72" height="72">
+    <h1>SimpMusic</h1>
+    <p>Melde dich mit dem Passwort aus deiner Unraid-Konfiguration an.</p>
+    <form id="login-form">
+      <input type="password" id="login-password" placeholder="Passwort" autocomplete="current-password" required>
+      <button type="submit">Anmelden</button>
+    </form>
+    <p class="login-error" id="login-error" hidden></p>
+  </div>
+</div>
+
+<header id="topbar">
+  <button class="icon-button" id="back-button" hidden aria-label="Zurück">&#8592;</button>
+  <span id="topbar-title">Start</span>
+  <span id="offline-badge" class="badge" hidden>Offline</span>
+  <button class="icon-button" id="reload-button" aria-label="Aktualisieren">&#8635;</button>
+</header>
+
+<main id="view" aria-live="polite"></main>
+
+<section id="now-playing" class="now-playing" hidden>
+  <div class="np-top">
+    <button class="icon-button" id="collapse-player" aria-label="Schliessen">&#8595;</button>
+    <span id="np-sleep-info" class="badge" hidden></span>
+    <button class="icon-button" id="np-more" aria-label="Mehr">&#8942;</button>
+  </div>
+
+  <img id="np-cover" alt="">
+
+  <div class="np-meta">
+    <h2 id="np-title">–</h2>
+    <p id="np-artist"></p>
+    <p id="np-votes" class="np-votes" hidden></p>
+  </div>
+
+  <div class="np-seek">
+    <input type="range" id="np-progress" min="0" max="1000" value="0" step="1" aria-label="Fortschritt">
+    <div class="np-times"><span id="np-elapsed">0:00</span><span id="np-duration">0:00</span></div>
+  </div>
+
+  <div class="np-controls">
+    <button class="icon-button" id="np-shuffle" aria-label="Zufall">&#8646;</button>
+    <button class="icon-button" id="np-prev" aria-label="Zurück">&#9198;</button>
+    <button class="icon-button primary" id="np-toggle" aria-label="Abspielen">&#9654;</button>
+    <button class="icon-button" id="np-next" aria-label="Weiter">&#9197;</button>
+    <button class="icon-button" id="np-repeat" aria-label="Wiederholen">&#128257;</button>
+  </div>
+
+  <div class="np-actions">
+    <button id="np-star" class="chip">&#9825; Favorit</button>
+    <button id="np-download" class="chip">&#8595; Offline</button>
+    <button id="np-radio" class="chip">&#9835; Radio</button>
+    <button id="np-lyrics-toggle" class="chip">Songtext</button>
+    <button id="np-sleep" class="chip">&#9203; Sleep</button>
+    <button id="np-eq" class="chip">Equalizer</button>
+  </div>
+
+  <div id="np-lyrics-panel" class="np-lyrics-panel" hidden>
+    <div class="lyrics-toolbar">
+      <button id="lyrics-translate" class="chip">Übersetzen</button>
+      <span id="lyrics-source" class="muted"></span>
+    </div>
+    <div id="np-lyrics" class="np-lyrics"></div>
+  </div>
+
+  <div id="np-queue" class="np-queue"></div>
+</section>
+
+<div id="mini-player" class="mini-player" hidden>
+  <img id="mini-cover" alt="">
+  <div class="mini-meta">
+    <strong id="mini-title">–</strong>
+    <span id="mini-artist"></span>
+  </div>
+  <button class="icon-button" id="mini-toggle" aria-label="Abspielen">&#9654;</button>
+  <button class="icon-button" id="mini-next" aria-label="Weiter">&#9197;</button>
+</div>
+
+<nav id="nav">
+  <button data-route="home" class="active"><span>&#9835;</span>Start</button>
+  <button data-route="search"><span>&#9906;</span>Suche</button>
+  <button data-route="explore"><span>&#9673;</span>Entdecken</button>
+  <button data-route="library"><span>&#9829;</span>Bibliothek</button>
+  <button data-route="settings"><span>&#9881;</span>Mehr</button>
+</nav>
+
+<div id="toast" class="toast" hidden></div>
+<div id="sheet" class="sheet" hidden><div class="sheet-body" id="sheet-body"></div></div>
+
+<audio id="audio-a" playsinline preload="auto"></audio>
+<audio id="audio-b" playsinline preload="auto"></audio>
+
+<script src="/static/eq.js?v={{ version }}"></script>
+<script src="/static/offline.js?v={{ version }}"></script>
+<script src="/static/player.js?v={{ version }}"></script>
+<script src="/static/app.js?v={{ version }}"></script>
+</body>
+</html>

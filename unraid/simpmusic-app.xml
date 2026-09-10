@@ -1,0 +1,120 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>simpmusic-app</Name>
+  <Repository>simpmusic-app:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>
+    SimpMusic-App stellt YouTube Music als selbst gehostete Web-App (PWA) bereit und
+    spricht gleichzeitig die Subsonic-Schnittstelle. Damit laesst sich die Musik im
+    Safari auf dem iPhone abspielen und ebenso mit Subsonic-Clients wie Amperfy nutzen.
+
+    Enthalten: werbefreies Streaming, Offline-Downloads, Charts/Stimmungen/Podcasts,
+    synchronisierte Songtexte, optional KI-Uebersetzung, 10-Band-Equalizer mit AutoEq,
+    Crossfade, Sleep-Timer, SponsorBlock, ReturnYouTubeDislike, Hoerstatistiken und
+    Jahresrueckblick. CarPlay kommt ueber Amperfy (Android Auto kann ein Browser nicht).
+
+    Nach dem Start: Weboberflaeche oeffnen, mit SUBSONIC_PASSWORD anmelden.
+    In Amperfy einen Subsonic-Server mit derselben URL, Benutzer und Passwort anlegen.
+  </Overview>
+  <Category>MediaApp:Music</Category>
+  <WebUI>http://[IP]:[PORT:5060]/</WebUI>
+  <TemplateURL/>
+  <Icon>http://[IP]:[PORT:5060]/static/icons/icon-512.png</Icon>
+  <ExtraParams>--memory=2g</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI Port" Target="5060" Default="5060" Mode="tcp"
+          Description="Port fuer Weboberflaeche und Subsonic-API."
+          Type="Port" Display="always" Required="true" Mask="false">5060</Config>
+
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/simpmusic-app/config" Mode="rw"
+          Description="Datenbank mit Favoriten, Playlists und Wiedergabeverlauf."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simpmusic-app/config</Config>
+
+  <Config Name="Cache" Target="/cache" Default="/mnt/user/appdata/simpmusic-app/cache" Mode="rw"
+          Description="Zwischengespeicherte Audiodateien und Cover."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simpmusic-app/cache</Config>
+
+  <Config Name="Logs" Target="/logs" Default="/mnt/user/appdata/simpmusic-app/logs" Mode="rw"
+          Description="Logdateien."
+          Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/simpmusic-app/logs</Config>
+
+  <Config Name="Benutzername" Target="SUBSONIC_USER" Default="simpmusic" Mode=""
+          Description="Benutzername fuer Weboberflaeche und Amperfy."
+          Type="Variable" Display="always" Required="true" Mask="false">simpmusic</Config>
+
+  <Config Name="Passwort" Target="SUBSONIC_PASSWORD" Default="" Mode=""
+          Description="Passwort fuer Weboberflaeche und Amperfy. Unbedingt aendern."
+          Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="Externe URL" Target="SERVER_URL" Default="" Mode=""
+          Description="Optional, z.B. https://music.example.com wenn ueber Reverse Proxy erreichbar."
+          Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Sprache" Target="YTM_LANGUAGE" Default="de" Mode=""
+          Description="Sprache der YouTube-Music-Ergebnisse."
+          Type="Variable" Display="advanced" Required="false" Mask="false">de</Config>
+
+  <Config Name="Region" Target="YTM_LOCATION" Default="CH" Mode=""
+          Description="Laendercode fuer Charts und Empfehlungen."
+          Type="Variable" Display="advanced" Required="false" Mask="false">CH</Config>
+
+  <Config Name="Streaming-Modus" Target="STREAM_MODE" Default="proxy" Mode=""
+          Description="proxy = Audio laeuft durch den Container (noetig fuer Amperfy-Offline). redirect = Client laedt direkt bei Google."
+          Type="Variable" Display="advanced" Required="false" Mask="false">proxy</Config>
+
+  <Config Name="Cache-Groesse (GB)" Target="CACHE_MAX_GB" Default="10" Mode=""
+          Description="Obergrenze fuer zwischengespeicherte Audiodateien."
+          Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+
+  <Config Name="Nach AAC wandeln" Target="TRANSCODE_TO_AAC" Default="true" Mode=""
+          Description="Opus nach AAC konvertieren, wenn YouTube kein m4a liefert. iOS spielt kein Opus."
+          Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+
+  <Config Name="YTM-Anmeldung" Target="YTM_AUTH_FILE" Default="" Mode=""
+          Description="Optional: Pfad zu einer exportierten ytmusicapi-Anmeldung, z.B. /config/ytmusic_auth.json, um eigene YouTube-Music-Playlists zu sehen."
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="SponsorBlock" Target="SPONSORBLOCK" Default="true" Mode=""
+          Description="Intros, Outros und Werbung in Musikvideos automatisch überspringen."
+          Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+
+  <Config Name="ReturnYouTubeDislike" Target="RETURN_YOUTUBE_DISLIKE" Default="true" Mode=""
+          Description="Like-/Dislike-Zahlen anzeigen."
+          Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+
+  <Config Name="Übersetzer" Target="TRANSLATE_PROVIDER" Default="none" Mode=""
+          Description="Songtext-Übersetzung: none, libretranslate oder openai (beliebiger OpenAI-kompatibler Endpunkt)."
+          Type="Variable" Display="advanced" Required="false" Mask="false">none</Config>
+
+  <Config Name="Übersetzer-URL" Target="TRANSLATE_URL" Default="" Mode=""
+          Description="z.B. http://libretranslate:5000 oder http://ollama:11434/v1"
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Übersetzer-API-Key" Target="TRANSLATE_API_KEY" Default="" Mode=""
+          Description="Optional, je nach Übersetzungsdienst."
+          Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <Config Name="Übersetzer-Modell" Target="TRANSLATE_MODEL" Default="gpt-4o-mini" Mode=""
+          Description="Nur bei TRANSLATE_PROVIDER=openai relevant."
+          Type="Variable" Display="advanced" Required="false" Mask="false">gpt-4o-mini</Config>
+
+  <Config Name="Zielsprache Übersetzung" Target="TRANSLATE_TARGET" Default="" Mode=""
+          Description="Leer = YTM_LANGUAGE. z.B. de, en, fr."
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Log-Level" Target="LOG_LEVEL" Default="INFO" Mode=""
+          Description="DEBUG, INFO, WARNING oder ERROR."
+          Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+</Container>

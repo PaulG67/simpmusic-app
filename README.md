@@ -1,0 +1,261 @@
+# SimpMusic-App
+
+YouTube Music als selbst gehostete Docker-App auf Unraid – bedienbar im Safari auf dem
+iPhone **und** über die Subsonic-Schnittstelle, an die sich [Amperfy](https://github.com/BLeeEZ/amperfy)
+direkt anhängt.
+
+Die Funktionsliste orientiert sich an [SimpMusic](https://simpmusic.org). Wo eine native
+Android-App etwas kann, das ein Browser nicht kann, steht das unten klar dabei.
+
+## Warum nicht einfach SimpMusic im Browser?
+
+[SimpMusic](https://simpmusic.org) ist eine native Android-App. Man kann sie nicht in einen
+Browser packen. Was sie inhaltlich liefert, ist aber nachbaubar, denn sie ist im Kern ein
+Client für die interne YouTube-Music-API.
+
+Genau das macht diese App – nur eben als Webdienst, und mit einem zweiten Ausgang für
+Amperfy. Beide Zugänge sprechen dieselbe Datenbasis: Was du im Browser als Favorit
+markierst, taucht in Amperfy auf und umgekehrt.
+
+```
+                 ┌──────────────────────────────┐
+ iPhone Safari ──►  PWA  ─┐                     │
+                 │        ├─ FastAPI ─ ytmusicapi ──► YouTube Music (Metadaten)
+ Amperfy ────────►  /rest ┘     │      yt-dlp   ──► YouTube (Audio)
+   (Subsonic)    │              └─ SQLite (Favoriten, Playlists, Verlauf, Stats)
+                 └──────────────────────────────┘
+```
+
+## Funktionsabdeckung gegenüber SimpMusic
+
+| SimpMusic | Hier | Anmerkung |
+|---|---|---|
+| Werbefreies Streaming | ja | YouTube-Music-Audio ohne Werbung |
+| Hintergrund / Bildschirm aus | ja, mit Einschränkung | PWA + MediaSession; Equalizer aus lassen (siehe unten) |
+| Offline-Modus | ja | Downloads im Browser (Cache API), auch ganze Playlists |
+| Intelligentes Caching | ja | Server-Cache **und** Geräte-Cache |
+| Synchronisierte Songtexte | ja | Zeile für Zeile, wenn YouTube Music Timestamps liefert |
+| KI-Übersetzung | ja, optional | LibreTranslate oder beliebiger OpenAI-kompatibler Endpunkt |
+| Charts | ja | Tab *Entdecken* |
+| Stimmungen & Genres | ja | YouTube Musics Moods-&-Genres-Baum |
+| Podcasts | ja | Suche, Abos, neue Episoden – auch in Amperfy |
+| Personalisierte Empfehlungen | ja | Startseite von YouTube Music |
+| 10-Band-Equalizer | ja | inkl. Profile und AutoEq-Import |
+| Crossfade | ja | 0–12 Sekunden |
+| Sleep-Timer | ja | Minuten oder „Ende des Titels“ |
+| SponsorBlock | ja | Intros, Outros, Werbung, Nicht-Musik |
+| ReturnYouTubeDislike | ja | Like-/Dislike-Zahlen am Now-Playing |
+| Hörstatistiken | ja | lokal, keine Telemetrie |
+| Jahresrückblick | ja | *Bibliothek → Statistiken → Rückblick* |
+| Android Auto | **nein** | Browser können das nicht. Amperfy bringt **CarPlay** mit |
+| Registrierungszwang / Tracking | nein | ein Passwort, alles bleibt auf dem NAS |
+
+### Hintergrundwiedergabe auf dem iPhone
+
+Safari spielt Audio im Hintergrund, wenn die Seite als PWA auf dem Home-Bildschirm
+liegt. Sperrbildschirm und AirPods-Steuerung laufen über die MediaSession-API.
+
+**Equalizer und Crossfade** leiten den Ton über die Web-Audio-API. Auf iOS kann das die
+Wiedergabe bei gesperrtem Bildschirm stören. Deshalb sind beide standardmässig aus.
+Wer sie braucht: einschalten und testen; bei Problemen ausschalten und die Seite neu laden.
+
+### Offline
+
+Titel und ganze Playlists lassen sich auf das Gerät herunterladen (*⋯ → Offline speichern*
+bzw. *Alle offline*). Der Service Worker beantwortet auch Byte-Range-Anfragen, damit
+`<audio>` seeken kann. Safari räumt Caches unter Speicherdruck auf – deshalb fragt die
+App nach persistentem Speicher. Das ist robuster als ein Tab, aber nicht so robust wie
+eine native App.
+
+### KI-Übersetzung
+
+Aus, solange du keinen Übersetzer konfigurierst. Zwei Varianten:
+
+```env
+# Selbst gehostetes LibreTranslate
+TRANSLATE_PROVIDER=libretranslate
+TRANSLATE_URL=http://libretranslate:5000
+
+# Ollama / LM Studio / OpenAI
+TRANSLATE_PROVIDER=openai
+TRANSLATE_URL=http://ollama:11434/v1
+TRANSLATE_MODEL=llama3.1
+```
+
+Ergebnisse werden lokal zwischengespeichert, dieselbe Übersetzung läuft also nur einmal.
+
+### CarPlay statt Android Auto
+
+Android Auto gibt es nur für native Android-Apps. Amperfy spricht Subsonic und bringt
+CarPlay mit – das ist hier das Gegenstück. In Amperfy denselben Server eintragen wie in
+der Weboberfläche unter *Mehr*.
+
+## Wichtig: wie die Bibliothek gedacht ist
+
+Amperfy synchronisiert beim Verbinden die **gesamte** Bibliothek eines Servers. YouTube
+Music hat aber keine endliche Bibliothek. Deshalb ist die Aufteilung so:
+
+* **Bibliothek** = was du kuratierst: Favoriten, deine Playlists, dein Wiedergabeverlauf,
+  abonnierte Podcasts. Das ist klein und synchronisiert in Sekunden.
+* **Suche / Entdecken** = live gegen YouTube Music. Du kannst also auch in Amperfy alles
+  suchen und sofort abspielen, ohne dass es vorher in der Bibliothek war.
+* Zusätzlich taucht eine Playlist **„Charts \<Region\>"** auf, damit direkt nach der
+  Einrichtung Inhalt da ist.
+
+Direkt nach der Installation ist die Bibliothek also leer – das ist kein Fehler. Markiere
+im Browser ein paar Titel als Favorit, dann füllt sich Amperfy.
+
+## Installation auf Unraid
+
+Die App wird lokal gebaut, so wie `mediasync-hub`.
+
+### Variante A: Docker Compose
+
+```bash
+cd /mnt/user/appdata/simpmusic-app
+# Projektdateien hierher kopieren
+cp .env.example .env      # SUBSONIC_PASSWORD anpassen
+docker compose up -d --build
+```
+
+### Variante B: Unraid-Template
+
+1. Image einmalig bauen:
+   ```bash
+   cd /mnt/user/appdata/simpmusic-app
+   docker build -t simpmusic-app:latest .
+   ```
+2. `unraid/simpmusic-app.xml` nach `/boot/config/plugins/dockerMan/templates-user/` kopieren.
+3. In Unraid unter *Docker → Add Container* das Template `simpmusic-app` wählen, Passwort
+   setzen, *Apply*.
+
+Danach erreichbar unter `http://<unraid-ip>:5060`.
+
+### Speicherlimit nicht zu klein wählen
+
+yt-dlp startet für YouTubes JavaScript-Challenges einen Deno-Prozess. Unterhalb von etwa
+512 MB wird der vom Kernel abgeschossen, und im Log steht dann `Signature solving failed`.
+Das mitgelieferte Compose-File und Template setzen deshalb 2 GB.
+
+## iPhone: als App einrichten
+
+1. `http://<unraid-ip>:5060` in Safari öffnen und anmelden.
+2. Teilen-Symbol → **Zum Home-Bildschirm**.
+
+Ab dann startet sie im Vollbild ohne Safari-Leisten, mit Sperrbildschirm-Steuerung. Für
+Zugriff von unterwegs die App hinter deinen Reverse Proxy hängen und `SERVER_URL` auf die
+externe Adresse setzen – iOS installiert PWAs nur zuverlässig über HTTPS.
+
+## Amperfy verbinden
+
+In Amperfy → *Login*:
+
+| Feld | Wert |
+|---|---|
+| Server-Typ | **Subsonic** |
+| URL | `http://<unraid-ip>:5060` (oder deine HTTPS-Adresse) |
+| Benutzername | Wert von `SUBSONIC_USER`, Standard `simpmusic` |
+| Passwort | Wert von `SUBSONIC_PASSWORD` |
+
+Die gleichen Angaben stehen in der Weboberfläche unter *Mehr*. Andere Subsonic-Clients
+(Symfonium, Feishin, play:Sub, Substreamer) funktionieren genauso. Amperfy bringt CarPlay,
+Offline-Download und Equalizer nativ mit – fürs Auto also Amperfy, fürs Sofa die PWA.
+
+## Konfiguration
+
+Alle Werte als Umgebungsvariablen, siehe `.env.example`:
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `SUBSONIC_USER` | `simpmusic` | Benutzername für Web und Subsonic |
+| `SUBSONIC_PASSWORD` | `simpmusic` | Passwort – unbedingt ändern |
+| `SERVER_URL` | – | Externe Basis-URL hinter einem Reverse Proxy |
+| `YTM_LANGUAGE` / `YTM_LOCATION` | `de` / `CH` | Sprache und Region der Ergebnisse |
+| `STREAM_MODE` | `proxy` | `proxy` oder `redirect` (siehe unten) |
+| `CACHE_ENABLED` / `CACHE_MAX_GB` | `true` / `10` | Zwischenspeicher für Audiodateien auf dem Server |
+| `TRANSCODE_TO_AAC` | `true` | Opus nach AAC wandeln, falls nötig |
+| `YTM_AUTH_FILE` | – | Optionale YouTube-Music-Anmeldung |
+| `YTDLP_COOKIE_FILE` | – | Optionale Cookie-Datei für yt-dlp |
+| `SPONSORBLOCK` | `true` | Intros/Outros überspringen |
+| `RETURN_YOUTUBE_DISLIKE` | `true` | Like-/Dislike-Zahlen |
+| `TRANSLATE_PROVIDER` | `none` | `none`, `libretranslate` oder `openai` |
+| `TRANSLATE_URL` | – | Endpunkt des Übersetzers |
+| `TRANSLATE_API_KEY` | – | Optional |
+| `TRANSLATE_MODEL` | `gpt-4o-mini` | Nur bei `openai` |
+| `TRANSLATE_TARGET` | – | Zielsprache, sonst `YTM_LANGUAGE` |
+| `LOG_LEVEL` | `INFO` | Protokollierung |
+
+### `STREAM_MODE`
+
+`proxy` leitet das Audio durch den Container. Das kostet etwas Bandbreite auf dem Server,
+ist aber die kompatible Variante: nur so funktionieren Amperfys Offline-Downloads und das
+Zwischenspeichern zuverlässig, weil YouTubes Medien-URLs kurzlebig und teils an die
+IP-Adresse gebunden sind. `redirect` schickt den Client direkt zu Google.
+
+### Eigene YouTube-Music-Playlists
+
+Optional. Mit `ytmusicapi` eine Anmeldung exportieren:
+
+```bash
+pip install ytmusicapi
+ytmusicapi browser        # erzeugt browser.json
+```
+
+Die Datei nach `/mnt/user/appdata/simpmusic-app/config/ytmusic_auth.json` legen und
+`YTM_AUTH_FILE=/config/ytmusic_auth.json` setzen. Danach erscheinen die Playlists deines
+Kontos in der Bibliothek und in Amperfy.
+
+### AutoEq-Profile
+
+Die Kurven von [AutoEq](https://github.com/jaakkopasanen/AutoEq) lassen sich unter
+*Equalizer → AutoEq-Profil importieren* einfügen. Sowohl `ParametricEQ.txt` als auch
+`GraphicEQ.txt` werden erkannt.
+
+## Fehlerbehebung
+
+**„Titel konnte nicht geladen werden" / im Log `Signature solving failed`**
+yt-dlp kommt nicht an die Formate. Meist zu wenig Container-Speicher (siehe oben), sonst
+ein veraltetes yt-dlp. Image neu bauen:
+`docker compose build --no-cache && docker compose up -d`.
+
+**Wiedergabe stockt oder bleibt stumm auf dem iPhone**
+iOS spielt kein Opus in WebM. Normalerweise liefert YouTube für Musik eine AAC-Spur; wenn
+nicht, greift die Konvertierung über ffmpeg, was den ersten Start um einige Sekunden
+verzögert. `TRANSCODE_TO_AAC=true` muss dafür gesetzt sein.
+
+**Wiedergabe stirbt bei gesperrtem Bildschirm, sobald der Equalizer an ist**
+Web Audio auf iOS. Equalizer und Crossfade ausschalten, Seite neu laden.
+
+**Amperfy zeigt eine leere Bibliothek**
+Erwartetes Verhalten, siehe oben. Erst Favoriten setzen, dann in Amperfy neu
+synchronisieren.
+
+**Suche liefert nichts**
+Region oder Sprache prüfen (`YTM_LOCATION`, `YTM_LANGUAGE`) und ob der Container ins
+Internet kommt. Im Log stehen die Fehler von ytmusicapi im Klartext.
+
+**Übersetzung tut nichts**
+`TRANSLATE_PROVIDER` und `TRANSLATE_URL` müssen gesetzt sein. Unter *Mehr* steht der
+aktuelle Status.
+
+## Projektstruktur
+
+```
+app/
+  core/       Konfiguration, Logging, Icon-Erzeugung
+  db/         SQLAlchemy-Modelle und Bibliotheks-Zugriffe
+  ytm/        ytmusicapi-Wrapper, ID-Schema, Normalisierung, yt-dlp-Streaming
+  services/   Katalog, Übersetzung, Statistiken, SponsorBlock/RYD
+  subsonic/   Subsonic-API: Envelope, Auth, Entitäten, Medienauslieferung
+  api/        JSON-API und Sitzungen für die Weboberfläche
+  static/     PWA (Player, Equalizer, Offline, Service Worker)
+  templates/  index.html
+unraid/       Unraid-Template
+```
+
+## Rechtliches
+
+Die App greift auf öffentliche YouTube-Endpunkte zu. Das kann den Nutzungsbedingungen von
+YouTube widersprechen. Für den privaten Gebrauch gedacht, ohne Gewähr – und nicht
+öffentlich erreichbar betreiben. Hörstatistiken bleiben auf dem NAS, es gibt keine
+Telemetrie.
