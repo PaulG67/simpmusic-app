@@ -107,29 +107,38 @@ im Browser ein paar Titel als Favorit, dann füllt sich Amperfy.
 
 ## Installation auf Unraid
 
-Die App wird lokal gebaut, so wie `mediasync-hub`.
+Wie bei Zoraxy Guard: Vorlage einmalig auf den USB-Stick legen, danach erscheint die App
+unter **Docker → Container hinzufügen → Template**.
 
-### Variante A: Docker Compose
+```bash
+cd /mnt/user/appdata
+git clone https://<DEIN_GITHUB_TOKEN>@github.com/PaulG67/simpmusic-app.git
+bash /mnt/user/appdata/simpmusic-app/unraid/install-template.sh
+```
+
+Dann in der Unraid-WebUI:
+
+1. **Docker → Container hinzufügen**
+2. Oben **Template** → **simpmusic-app** (User Templates)
+3. **Passwort** setzen, Rest kann so bleiben
+4. **Apply**
+
+WebUI: `http://<unraid-ip>:5060`
+
+Das Image kommt von `ghcr.io/paulg67/simpmusic-app:latest`. Updates später über
+**Docker → simpmusic-app → Force Update**.
+
+Wenn Unraid das Image nicht ziehen kann (privates GHCR-Paket): unter
+**Einstellungen → Docker** bei den Registry-Logins `ghcr.io` mit GitHub-Benutzer
+`PaulG67` und einem Token (Scope `read:packages`) eintragen.
+
+### Optional: Docker Compose
 
 ```bash
 cd /mnt/user/appdata/simpmusic-app
-# Projektdateien hierher kopieren
-cp .env.example .env      # SUBSONIC_PASSWORD anpassen
-docker compose up -d --build
+cp .env.example .env
+docker compose up -d
 ```
-
-### Variante B: Unraid-Template
-
-1. Image einmalig bauen:
-   ```bash
-   cd /mnt/user/appdata/simpmusic-app
-   docker build -t simpmusic-app:latest .
-   ```
-2. `unraid/simpmusic-app.xml` nach `/boot/config/plugins/dockerMan/templates-user/` kopieren.
-3. In Unraid unter *Docker → Add Container* das Template `simpmusic-app` wählen, Passwort
-   setzen, *Apply*.
-
-Danach erreichbar unter `http://<unraid-ip>:5060`.
 
 ### Speicherlimit nicht zu klein wählen
 

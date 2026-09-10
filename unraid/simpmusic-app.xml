@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>simpmusic-app</Name>
-  <Repository>simpmusic-app:latest</Repository>
-  <Registry/>
+  <Repository>ghcr.io/paulg67/simpmusic-app:latest</Repository>
+  <Registry>https://github.com/users/PaulG67/packages/container/package/simpmusic-app</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support/>
-  <Project/>
+  <Support>https://github.com/PaulG67/simpmusic-app/issues</Support>
+  <Project>https://github.com/PaulG67/simpmusic-app</Project>
   <Overview>
     SimpMusic-App stellt YouTube Music als selbst gehostete Web-App (PWA) bereit und
     spricht gleichzeitig die Subsonic-Schnittstelle. Damit laesst sich die Musik im
@@ -19,13 +19,16 @@
     Crossfade, Sleep-Timer, SponsorBlock, ReturnYouTubeDislike, Hoerstatistiken und
     Jahresrueckblick. CarPlay kommt ueber Amperfy (Android Auto kann ein Browser nicht).
 
+    Vorlage einmalig auf Unraid: bash /mnt/user/appdata/simpmusic-app/unraid/install-template.sh
+    Danach: Docker → Container hinzufügen → Template simpmusic-app → Passwort setzen → Apply.
+
     Nach dem Start: Weboberflaeche oeffnen, mit SUBSONIC_PASSWORD anmelden.
     In Amperfy einen Subsonic-Server mit derselben URL, Benutzer und Passwort anlegen.
   </Overview>
   <Category>MediaApp:Music</Category>
   <WebUI>http://[IP]:[PORT:5060]/</WebUI>
-  <TemplateURL/>
-  <Icon>http://[IP]:[PORT:5060]/static/icons/icon-512.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/PaulG67/simpmusic-app/main/unraid/simpmusic-app.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/PaulG67/simpmusic-app/main/app/static/icons/icon.svg</Icon>
   <ExtraParams>--memory=2g</ExtraParams>
   <PostArgs/>
   <CPUset/>
@@ -113,6 +116,10 @@
   <Config Name="Zielsprache Übersetzung" Target="TRANSLATE_TARGET" Default="" Mode=""
           Description="Leer = YTM_LANGUAGE. z.B. de, en, fr."
           Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Zeitzone" Target="TZ" Default="Europe/Zurich" Mode=""
+          Description="Zeitzone für Statistiken und Jahresrückblick."
+          Type="Variable" Display="always" Required="false" Mask="false">Europe/Zurich</Config>
 
   <Config Name="Log-Level" Target="LOG_LEVEL" Default="INFO" Mode=""
           Description="DEBUG, INFO, WARNING oder ERROR."

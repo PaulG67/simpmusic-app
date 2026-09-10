@@ -1,5 +1,6 @@
 services:
   simpmusic-app:
+    image: ghcr.io/paulg67/simpmusic-app:latest
     build: .
     container_name: simpmusic-app
     ports:
