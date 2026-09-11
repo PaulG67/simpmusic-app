@@ -11,6 +11,8 @@ import hmac
 from fastapi import Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from app.core.auth_store import password as stored_password
+from app.core.auth_store import password_required
 from app.core.settings import clean_secret, settings
 
 COOKIE_NAME = "music_play_session"
@@ -28,7 +30,9 @@ def secrets_equal(left: str | None, right: str | None) -> bool:
 
 
 def check_password(password: str) -> bool:
-    return secrets_equal(clean_secret(password), settings.subsonic_password)
+    if not password_required():
+        return True
+    return secrets_equal(clean_secret(password), stored_password())
 
 
 def issue(username: str) -> str:

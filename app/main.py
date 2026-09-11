@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -8,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api import session as web_session
 from app.api.web import router as web_router
+from app.core import auth_store
 from app.core.icons import ensure_icons
 from app.core.logging import logger
 from app.core.settings import APP_NAME, APP_VERSION, settings
@@ -23,19 +23,13 @@ async def lifespan(_: FastAPI):
     init_db()
     ensure_icons()
     logger.info(
-        "{} {} gestartet - Subsonic-Benutzer '{}', Streaming '{}'",
+        "{} {} gestartet - Benutzer '{}', Streaming '{}', Passwort {}",
         APP_NAME,
         APP_VERSION,
-        settings.subsonic_user,
+        auth_store.username(),
         settings.stream_mode,
+        "gesetzt" if auth_store.password_required() else "offen",
     )
-    raw_password = os.getenv("SUBSONIC_PASSWORD")
-    if raw_password is None or not str(raw_password).strip():
-        logger.warning(
-            "SUBSONIC_PASSWORD ist leer - Anmeldung mit Standardpasswort 'musicplay'"
-        )
-    elif settings.subsonic_password == "musicplay":
-        logger.warning("Standardpasswort aktiv - bitte SUBSONIC_PASSWORD setzen")
     yield
     await media.aclose()
 
@@ -48,7 +42,10 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.middleware("http")
 async def attach_session(request: Request, call_next):
-    request.state.session_user = web_session.read(request)
+    user = web_session.read(request)
+    if not user and not auth_store.password_required():
+        user = auth_store.username()
+    request.state.session_user = user
     return await call_next(request)
 
 

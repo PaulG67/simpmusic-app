@@ -891,6 +891,86 @@
 
     $("view").replaceChildren(
       element("div", { class: "section" }, [
+        element("h2", { text: "Zugang" }),
+        element("p", {
+          class: "muted",
+          text: status.passwordRequired
+            ? "Passwort ist gesetzt. Web und Amperfy verwenden dieselben Daten."
+            : "Kein Passwort – die App ist im lokalen Netz offen. Du kannst hier eines setzen.",
+        }),
+        element("div", { class: "settings-form" }, [
+          element("input", {
+            type: "text",
+            id: "acct-user",
+            value: status.subsonicUser || "musicplay",
+            autocomplete: "username",
+            placeholder: "Benutzername für Amperfy",
+          }),
+          element("input", {
+            type: "password",
+            id: "acct-pass",
+            autocomplete: "new-password",
+            placeholder: status.passwordRequired ? "Neues Passwort" : "Passwort",
+          }),
+          element("input", {
+            type: "password",
+            id: "acct-pass2",
+            autocomplete: "new-password",
+            placeholder: "Passwort wiederholen",
+          }),
+          element("div", { class: "row-buttons" }, [
+            element("button", {
+              class: "chip solid",
+              text: "Speichern",
+              onclick: async () => {
+                const username = $("acct-user").value.trim();
+                const password = $("acct-pass").value;
+                const passwordConfirm = $("acct-pass2").value;
+                if (!password) {
+                  toast("Passwort eingeben oder «Passwort entfernen» nutzen");
+                  return;
+                }
+                try {
+                  const data = await api("/api/account", {
+                    method: "POST",
+                    body: { username, password, passwordConfirm },
+                  });
+                  if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+                  toast(data.passwordRequired ? "Passwort gespeichert" : "Bitte ein Passwort eingeben");
+                  render(state.route, true);
+                } catch (error) {
+                  toast(error.message);
+                }
+              },
+            }),
+            status.passwordRequired
+              ? element("button", {
+                  class: "chip",
+                  text: "Passwort entfernen",
+                  onclick: async () => {
+                    try {
+                      const data = await api("/api/account", {
+                        method: "POST",
+                        body: {
+                          username: $("acct-user").value.trim(),
+                          password: "",
+                          passwordConfirm: "",
+                        },
+                      });
+                      if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+                      toast("Passwort entfernt – Zugang wieder offen");
+                      render(state.route, true);
+                    } catch (error) {
+                      toast(error.message);
+                    }
+                  },
+                })
+              : null,
+          ]),
+        ]),
+      ]),
+
+      element("div", { class: "section" }, [
         element("h2", { text: "Wiedergabe" }),
         element("div", { class: "chips" }, [
           element("button", { class: "chip", text: "Equalizer & Crossfade", onclick: openEqualizerSheet }),
@@ -908,7 +988,7 @@
           element("dt", { text: "Benutzer" }),
           element("dd", { text: status.subsonicUser }),
           element("dt", { text: "Passwort" }),
-          element("dd", { text: "wie bei der Anmeldung hier" }),
+          element("dd", { text: status.passwordRequired ? "wie unter Zugang gesetzt" : "kein Passwort nötig" }),
         ]),
         element("p", {
           class: "muted",
@@ -947,15 +1027,17 @@
             render(state.route, true);
           },
         }),
-        element("button", {
-          class: "chip",
-          text: "Abmelden",
-          onclick: async () => {
-            await api("/api/logout", { method: "POST" });
-            localStorage.removeItem(TOKEN_KEY);
-            location.reload();
-          },
-        }),
+        status.passwordRequired
+          ? element("button", {
+              class: "chip",
+              text: "Abmelden",
+              onclick: async () => {
+                await api("/api/logout", { method: "POST" });
+                localStorage.removeItem(TOKEN_KEY);
+                location.reload();
+              },
+            })
+          : null,
       ])
     );
   }
@@ -1607,7 +1689,7 @@
 
   async function boot() {
     const session = await api("/api/session");
-    if (!session.authenticated) {
+    if (!session.authenticated && session.passwordRequired) {
       $("login").hidden = false;
       return;
     }

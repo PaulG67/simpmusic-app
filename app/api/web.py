@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import session as web_session
+from app.core import auth_store
 from app.core.logging import logger
 from app.core.settings import APP_VERSION, settings
 from app.db import repo
@@ -64,9 +65,11 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
 
 @router.get("/login-hint")
 async def login_hint():
+    required = auth_store.password_required()
     return {
-        "username": settings.subsonic_user,
-        "passwordLength": len(settings.subsonic_password),
+        "username": auth_store.username(),
+        "passwordRequired": required,
+        "passwordLength": len(auth_store.password()) if required else 0,
         "version": APP_VERSION,
     }
 
@@ -83,6 +86,18 @@ def _set_session_cookie(response: Response, token: str, request: Request) -> Non
     )
 
 
+def _session_payload(user: str | None) -> dict:
+    required = auth_store.password_required()
+    return {
+        "authenticated": bool(user) or not required,
+        "passwordRequired": required,
+        "user": user or (auth_store.username() if not required else None),
+        "version": APP_VERSION,
+        "ytmAccount": ytm.is_authenticated(),
+        "location": settings.ytm_location,
+    }
+
+
 @router.post("/login")
 async def login(request: Request):
     content_type = (request.headers.get("content-type") or "").lower()
@@ -95,8 +110,8 @@ async def login(request: Request):
 
     password = payload.get("password") or ""
     entered = web_session.clean_secret(password)
-    expected = settings.subsonic_password
-    if not web_session.check_password(password):
+    expected = auth_store.password()
+    if auth_store.password_required() and not web_session.check_password(password):
         logger.warning(
             "Login fehlgeschlagen: Eingabe {} Zeichen, konfiguriert {} Zeichen",
             len(entered),
@@ -104,17 +119,17 @@ async def login(request: Request):
         )
         detail = (
             f"Passwort falsch. Eingegeben: {len(entered)} Zeichen, "
-            f"im Container gesetzt: {len(expected)} Zeichen."
+            f"gesetzt: {len(expected)} Zeichen."
         )
         if wants_json:
             raise HTTPException(status_code=401, detail=detail)
         return RedirectResponse("/?login=fail", status_code=303)
 
-    token = web_session.issue(settings.subsonic_user)
+    token = web_session.issue(auth_store.username())
     logger.info("Web-Login erfolgreich")
     if wants_json:
         response = JSONResponse(
-            {"user": settings.subsonic_user, "token": token, "version": APP_VERSION}
+            {"user": auth_store.username(), "token": token, "version": APP_VERSION}
         )
         _set_session_cookie(response, token, request)
         return response
@@ -132,14 +147,28 @@ async def logout(response: Response):
 
 @router.get("/session")
 async def whoami(request: Request):
-    username = getattr(request.state, "session_user", None)
-    return {
-        "authenticated": bool(username),
-        "user": username,
-        "version": APP_VERSION,
-        "ytmAccount": ytm.is_authenticated(),
-        "location": settings.ytm_location,
-    }
+    return _session_payload(getattr(request.state, "session_user", None))
+
+
+@router.post("/account")
+async def save_account(request: Request, response: Response, payload: dict = Body(...)):
+    """Set or clear the in-app password. Open on first run until a password exists."""
+    if auth_store.password_required():
+        _require_session(request)
+
+    username = web_session.clean_secret(payload.get("username") or "") or auth_store.username()
+    if payload.get("password") is None:
+        raise HTTPException(status_code=400, detail="Passwort fehlt")
+    new_password = web_session.clean_secret(str(payload.get("password")))
+    confirm = web_session.clean_secret(str(payload.get("passwordConfirm") or new_password))
+    if new_password != confirm:
+        raise HTTPException(status_code=400, detail="Passwörter stimmen nicht überein")
+
+    auth_store.save(username, new_password)
+    token = web_session.issue(username)
+    _set_session_cookie(response, token, request)
+    logger.info("Zugang aktualisiert - Passwort {}", "gesetzt" if new_password else "entfernt")
+    return {"ok": True, "user": username, "token": token, "passwordRequired": bool(new_password)}
 
 
 # --------------------------------------------------------------------------
@@ -523,7 +552,8 @@ async def status(request: Request):
         "libraryTracks": library,
         "cache": streams.cache_stats(),
         "streamMode": settings.stream_mode,
-        "subsonicUser": settings.subsonic_user,
+        "subsonicUser": auth_store.username(),
+        "passwordRequired": auth_store.password_required(),
         "translation": {
             "enabled": settings.translation_enabled,
             "provider": settings.translate_provider,

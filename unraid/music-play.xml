@@ -58,12 +58,12 @@
           Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/music-play/logs</Config>
 
   <Config Name="Benutzername" Target="SUBSONIC_USER" Default="musicplay" Mode=""
-          Description="Benutzername fuer Weboberflaeche und Amperfy."
-          Type="Variable" Display="always" Required="true" Mask="false">musicplay</Config>
+          Description="Vorschlag fuer den Amperfy-Benutzernamen. Kann in der App unter Mehr geaendert werden."
+          Type="Variable" Display="always" Required="false" Mask="false">musicplay</Config>
 
-  <Config Name="Passwort" Target="SUBSONIC_PASSWORD" Default="musicplay" Mode=""
-          Description="Genau dieses Passwort in der Weboberflaeche eingeben (nicht den Config-Pfad). Leer = musicplay. Kein Dollarzeichen, Unraid verschluckt $VAR."
-          Type="Variable" Display="always" Required="true" Mask="true">musicplay</Config>
+  <Config Name="Passwort" Target="SUBSONIC_PASSWORD" Default="" Mode=""
+          Description="Nicht noetig. Passwort in der App unter Mehr setzen. Unraid-Passwortfelder werden ignoriert."
+          Type="Variable" Display="always" Required="false" Mask="true"></Config>
 
   <Config Name="Externe URL" Target="SERVER_URL" Default="" Mode=""
           Description="Optional, z.B. https://music.example.com wenn ueber Reverse Proxy erreichbar."

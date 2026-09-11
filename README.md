@@ -125,14 +125,9 @@ Dann in der Unraid-WebUI:
 
 WebUI: `http://<unraid-ip>:5080`
 
-Port **5060 nicht verwenden**. Chrome und Edge sperren ihn (`ERR_UNSAFE_PORT`, SIP).
-Bei einer eigenen Container-IP (br0) gilt der **App-Port** in der URL, z.B.
-`http://192.168.0.188:5080`. Wer `PORT=80` setzt, kommt mit `http://192.168.0.188` aus.
-
-Anmeldung: Benutzername aus dem Feld **Benutzername** (Standard `musicplay`) und
-Passwort aus dem Feld **Passwort** – nicht aus dem Config-Pfad. Steht das
-Passwort-Feld leer, gilt `musicplay`. Zeichen wie `$` im Passwort vermeiden
-(Unraid wertet sie als Variablen aus).
+Beim ersten Start ist **kein Passwort** nötig. Unter **Mehr → Zugang** kannst du
+später Benutzername und Passwort setzen (gilt auch für Amperfy). Das Unraid-Feld
+Passwort wird ignoriert.
 
 Das Image kommt von `ghcr.io/paulg67/music-play:latest`. Updates später über
 **Docker → music-play → Force Update**.
@@ -171,8 +166,8 @@ In Amperfy → *Login*:
 |---|---|
 | Server-Typ | **Subsonic** |
 | URL | `http://<unraid-ip>:5080` (oder eigene IP / HTTPS-Adresse) |
-| Benutzername | Wert von `SUBSONIC_USER`, Standard `musicplay` |
-| Passwort | Wert von `SUBSONIC_PASSWORD` |
+| Benutzername | unter *Mehr → Zugang*, sonst `SUBSONIC_USER` / `musicplay` |
+| Passwort | leer, solange keins unter *Mehr* gesetzt ist |
 
 Die gleichen Angaben stehen in der Weboberfläche unter *Mehr*. Andere Subsonic-Clients
 (Symfonium, Feishin, play:Sub, Substreamer) funktionieren genauso. Amperfy bringt CarPlay,
@@ -185,8 +180,8 @@ Alle Werte als Umgebungsvariablen, siehe `.env.example`:
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `PORT` | `5080` | Web- und Subsonic-Port. Nicht 5060 (Chrome: ERR_UNSAFE_PORT) |
-| `SUBSONIC_USER` | `musicplay` | Benutzername für Web und Subsonic |
-| `SUBSONIC_PASSWORD` | `musicplay` | Passwort – unbedingt ändern |
+| `SUBSONIC_USER` | `musicplay` | Vorschlag für den Benutzernamen, in der App änderbar |
+| `SUBSONIC_PASSWORD` | leer | Wird ignoriert; Passwort in der App unter Mehr setzen |
 | `SERVER_URL` | – | Externe Basis-URL hinter einem Reverse Proxy |
 | `YTM_LANGUAGE` / `YTM_LOCATION` | `de` / `CH` | Sprache und Region der Ergebnisse |
 | `STREAM_MODE` | `proxy` | `proxy` oder `redirect` (siehe unten) |
