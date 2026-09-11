@@ -32,10 +32,11 @@ cp "${SOURCE_XML}" "${USER_XML}"
 echo "    ${USER_XML}"
 
 echo "==> 2/3 Docker-Image"
-if docker pull "${IMAGE}"; then
+if docker pull "${IMAGE}" 2>/dev/null; then
   echo "    ${IMAGE}"
 else
-  echo "    pull fehlgeschlagen — baue lokal aus dem Repo"
+  echo "    GHCR-Pull nicht möglich (Paket noch privat)."
+  echo "    Baue das Image lokal — danach funktioniert «Container hinzufügen»."
   ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
   if [[ ! -f "${ROOT_DIR}/Dockerfile" ]]; then
     echo "    Dockerfile fehlt in ${ROOT_DIR}"
@@ -43,6 +44,10 @@ else
   fi
   docker build -t "${IMAGE}" "${ROOT_DIR}"
   echo "    lokal gebaut und als ${IMAGE} getaggt"
+  echo
+  echo "    Damit Unraid später «Force Update» kann, das Paket öffentlich machen:"
+  echo "    https://github.com/PaulG67/simpmusic-app/pkgs/container/simpmusic-app"
+  echo "    → Package settings → Change visibility → Public"
 fi
 
 echo "==> 3/3 Fertig"

@@ -112,7 +112,7 @@ unter **Docker → Container hinzufügen → Template**.
 
 ```bash
 cd /mnt/user/appdata
-git clone https://<DEIN_GITHUB_TOKEN>@github.com/PaulG67/simpmusic-app.git
+git clone https://github.com/PaulG67/simpmusic-app.git
 bash /mnt/user/appdata/simpmusic-app/unraid/install-template.sh
 ```
 
@@ -128,9 +128,10 @@ WebUI: `http://<unraid-ip>:5060`
 Das Image kommt von `ghcr.io/paulg67/simpmusic-app:latest`. Updates später über
 **Docker → simpmusic-app → Force Update**.
 
-Wenn Unraid das Image nicht ziehen kann (privates GHCR-Paket): unter
-**Einstellungen → Docker** bei den Registry-Logins `ghcr.io` mit GitHub-Benutzer
-`PaulG67` und einem Token (Scope `read:packages`) eintragen.
+Das Container-Paket muss auf GitHub **Public** sein (Repo ist öffentlich, das Paket
+startet trotzdem privat). Einmalig:
+[Package simpmusic-app](https://github.com/PaulG67/simpmusic-app/pkgs/container/simpmusic-app)
+→ **Package settings → Change visibility → Public**.
 
 ### Optional: Docker Compose
 
