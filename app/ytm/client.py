@@ -320,6 +320,8 @@ def album(browse_id: str) -> dict | None:
         except Exception as exc:
             logger.error("Album {} konnte nicht geladen werden: {}", browse_id, exc)
             return None
+        if not isinstance(raw, dict):
+            return None
 
         info = mapper.normalize_album({**raw, "browseId": browse_id})
         if info is None:
@@ -335,6 +337,8 @@ def album(browse_id: str) -> dict | None:
         }
         tracks = []
         for position, raw_track in enumerate(raw.get("tracks") or [], start=1):
+            if not isinstance(raw_track, dict):
+                continue
             track = mapper.normalize_song(raw_track, album_hint=hint)
             if track is None:
                 continue
@@ -353,43 +357,54 @@ def artist(channel_id: str) -> dict | None:
     def produce() -> dict | None:
         try:
             raw = client().get_artist(channel_id)
+            if not isinstance(raw, dict):
+                return None
+
+            info = mapper.normalize_artist({**raw, "channelId": channel_id})
+            if info is None:
+                return None
+
+            albums: list[dict] = []
+            for section in ("albums", "singles"):
+                block = raw.get(section) or {}
+                if not isinstance(block, dict):
+                    continue
+                for raw_album in block.get("results") or []:
+                    if not isinstance(raw_album, dict):
+                        continue
+                    item = mapper.normalize_album(raw_album)
+                    if item:
+                        item.setdefault("artist", info["name"])
+                        item.setdefault("artist_id", channel_id)
+                        albums.append(item)
+
+            top_songs = []
+            songs_block = raw.get("songs") if isinstance(raw.get("songs"), dict) else {}
+            for raw_song in songs_block.get("results") or []:
+                if not isinstance(raw_song, dict):
+                    continue
+                track = mapper.normalize_song(raw_song)
+                if track:
+                    top_songs.append(track)
+
+            related = []
+            related_block = raw.get("related") if isinstance(raw.get("related"), dict) else {}
+            for raw_related in related_block.get("results") or []:
+                if not isinstance(raw_related, dict):
+                    continue
+                item = mapper.normalize_artist(raw_related)
+                if item:
+                    related.append(item)
+
+            info["albums"] = albums
+            info["album_count"] = len(albums)
+            info["top_songs"] = top_songs
+            info["related"] = related
+            info["songs_playlist_id"] = songs_block.get("browseId")
+            return info
         except Exception as exc:
             logger.error("Interpret {} konnte nicht geladen werden: {}", channel_id, exc)
             return None
-
-        info = mapper.normalize_artist({**raw, "channelId": channel_id})
-        if info is None:
-            return None
-
-        albums: list[dict] = []
-        for section in ("albums", "singles"):
-            block = raw.get(section) or {}
-            for raw_album in block.get("results") or []:
-                item = mapper.normalize_album(raw_album)
-                if item:
-                    item.setdefault("artist", info["name"])
-                    item.setdefault("artist_id", channel_id)
-                    albums.append(item)
-
-        top_songs = []
-        songs_block = raw.get("songs") or {}
-        for raw_song in songs_block.get("results") or []:
-            track = mapper.normalize_song(raw_song)
-            if track:
-                top_songs.append(track)
-
-        related = []
-        for raw_related in (raw.get("related") or {}).get("results") or []:
-            item = mapper.normalize_artist(raw_related)
-            if item:
-                related.append(item)
-
-        info["albums"] = albums
-        info["album_count"] = len(albums)
-        info["top_songs"] = top_songs
-        info["related"] = related
-        info["songs_playlist_id"] = songs_block.get("browseId")
-        return info
 
     return _cached(f"artist:{channel_id}", produce)
 
@@ -419,30 +434,100 @@ def song(video_id: str) -> dict | None:
     return _cached(f"song:{video_id}", produce)
 
 
+def _normalize_playlist_tracks(raw_tracks) -> list[dict]:
+    tracks = []
+    for raw_track in raw_tracks or []:
+        if not isinstance(raw_track, dict):
+            continue
+        if raw_track.get("isAvailable") is False:
+            continue
+        try:
+            track = mapper.normalize_song(raw_track)
+        except Exception:
+            continue
+        if track:
+            tracks.append(track)
+    return tracks
+
+
+def _watch_playlist(playlist_id: str, limit: int) -> dict | None:
+    try:
+        raw = client().get_watch_playlist(playlistId=playlist_id, limit=limit)
+    except TypeError:
+        try:
+            raw = client().get_watch_playlist(playlistId=playlist_id)
+        except Exception as exc:
+            logger.debug("Watch-Playlist {} nicht ladbar: {}", playlist_id, exc)
+            return None
+    except Exception as exc:
+        logger.debug("Watch-Playlist {} nicht ladbar: {}", playlist_id, exc)
+        return None
+    if not isinstance(raw, dict):
+        return None
+    tracks = _normalize_playlist_tracks(raw.get("tracks"))
+    if not tracks:
+        return None
+    first = tracks[0]
+    return {
+        "id": playlist_id,
+        "name": mapper._text(raw.get("title"), "Mix"),
+        "owner": "YouTube Music",
+        "description": "",
+        "thumbnail": first.get("thumbnail"),
+        "song_count": len(tracks),
+        "duration": sum(int(track.get("duration") or 0) for track in tracks),
+        "tracks": tracks,
+        "kind": "playlist",
+    }
+
+
 def playlist(playlist_id: str, limit: int = 200) -> dict | None:
+    playlist_id = (playlist_id or "").strip()
+    if playlist_id.startswith("VL"):
+        playlist_id = playlist_id[2:]
+    if not playlist_id:
+        return None
+
     def produce() -> dict | None:
         try:
-            raw = client().get_playlist(playlist_id, limit=limit)
+            if playlist_id.startswith(("MPRE", "OLAK")):
+                album_data = album(playlist_id)
+                if album_data:
+                    return {
+                        "id": playlist_id,
+                        "name": album_data.get("name") or "Album",
+                        "owner": album_data.get("artist") or "YouTube Music",
+                        "description": album_data.get("description") or "",
+                        "thumbnail": album_data.get("thumbnail"),
+                        "song_count": album_data.get("song_count") or len(album_data.get("tracks") or []),
+                        "duration": album_data.get("duration") or 0,
+                        "tracks": album_data.get("tracks") or [],
+                        "kind": "playlist",
+                    }
+
+            raw = None
+            try:
+                raw = client().get_playlist(playlist_id, limit=limit)
+            except Exception as exc:
+                logger.debug("get_playlist {}: {}", playlist_id, exc)
+
+            if isinstance(raw, dict):
+                info = mapper.normalize_playlist({**raw, "playlistId": playlist_id})
+                if info:
+                    tracks = _normalize_playlist_tracks(raw.get("tracks"))
+                    if tracks:
+                        info["tracks"] = tracks
+                        info["song_count"] = info.get("song_count") or len(tracks)
+                        info["duration"] = info.get("duration") or sum(
+                            int(track.get("duration") or 0) for track in tracks
+                        )
+                        info["kind"] = "playlist"
+                        return info
+
+            return _watch_playlist(playlist_id, limit)
         except Exception as exc:
-            logger.error("Playlist {} konnte nicht geladen werden: {}", playlist_id, exc)
+            logger.exception("Playlist {} konnte nicht geladen werden: {}", playlist_id, exc)
             return None
-
-        info = mapper.normalize_playlist({**raw, "playlistId": playlist_id})
-        if info is None:
-            return None
-
-        tracks = []
-        for raw_track in raw.get("tracks") or []:
-            if raw_track.get("isAvailable") is False:
-                continue
-            track = mapper.normalize_song(raw_track)
-            if track:
-                tracks.append(track)
-
-        info["tracks"] = tracks
-        info["song_count"] = info.get("song_count") or len(tracks)
-        info["duration"] = info.get("duration") or sum(int(t.get("duration") or 0) for t in tracks)
-        return info
 
     return _cached(f"playlist:{playlist_id}:{limit}", produce, ttl=900)
 

@@ -780,7 +780,17 @@
 
   async function renderYtPlaylist(playlistId, title) {
     loading();
-    const playlist = await api(`/api/ytplaylist/${encodeURIComponent(playlistId)}`);
+    let playlist;
+    try {
+      playlist = await api(`/api/ytplaylist/${encodeURIComponent(playlistId)}`);
+    } catch (error) {
+      try {
+        await api(`/api/album/${encodeURIComponent(playlistId)}`);
+        return renderAlbum(playlistId);
+      } catch {
+        throw error;
+      }
+    }
     setTitle(playlist.name || title || "Playlist");
     const tracks = playlist.tracks || [];
 
@@ -798,7 +808,7 @@
 
     $("view").replaceChildren(
       playAllHeader(playlist.name, `${tracks.length} Titel`, playlist.thumbnail, tracks, [copy]),
-      trackList(tracks)
+      tracks.length ? trackList(tracks) : element("div", { class: "empty", text: "Keine Titel in dieser Playlist." })
     );
   }
 

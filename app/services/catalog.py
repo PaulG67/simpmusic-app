@@ -7,6 +7,7 @@ another round trip to YouTube.
 
 from fastapi.concurrency import run_in_threadpool
 
+from app.core.logging import logger
 from app.db.database import session_scope
 from app.db import repo
 from app.ytm import client as ytm
@@ -15,8 +16,11 @@ from app.ytm import client as ytm
 def _persist_songs(tracks: list[dict]) -> None:
     if not tracks:
         return
-    with session_scope() as session:
-        repo.upsert_tracks(session, tracks)
+    try:
+        with session_scope() as session:
+            repo.upsert_tracks(session, tracks)
+    except Exception as exc:
+        logger.exception("Titel nicht gespeichert: {}", exc)
 
 
 def _persist_album(album: dict) -> None:
@@ -46,7 +50,10 @@ async def search(query: str, song_limit: int = 25, album_limit: int = 12, artist
             for artist in results.get("artists") or []:
                 repo.upsert_artist(session, artist)
 
-    await run_in_threadpool(persist)
+    try:
+        await run_in_threadpool(persist)
+    except Exception as exc:
+        logger.exception("Suchergebnisse nicht gespeichert: {}", exc)
     return results
 
 

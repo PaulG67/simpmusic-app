@@ -9,7 +9,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 APP_NAME = "Music Play"
-APP_VERSION = "1.3.6"
+APP_VERSION = "1.3.7"
 SUBSONIC_API_VERSION = "1.16.1"
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))

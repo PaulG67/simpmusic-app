@@ -48,35 +48,30 @@ def _subsonic_id(item: dict, kind: str) -> str:
     return item_id
 
 
+def _json_clean(value):
+    """Recursively drop values FastAPI cannot JSON-encode (YouTube leftovers)."""
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        return 0 if value != value or abs(value) == float("inf") else value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_clean(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_clean(item) for item in value]
+    try:
+        text = str(value).strip()
+    except Exception:
+        return None
+    if not text or text in {"None", "null"} or len(text) > 2000:
+        return None
+    return text
+
+
 def _json_item(item: dict) -> dict:
-    """Drop values FastAPI cannot JSON-encode (YouTube leftovers, datetimes)."""
-    clean = {}
-    for key, value in item.items():
-        if value is None or isinstance(value, (str, int, bool)):
-            clean[key] = value
-        elif isinstance(value, float):
-            clean[key] = 0 if value != value or abs(value) == float("inf") else value
-        elif isinstance(value, (datetime, date)):
-            clean[key] = value.isoformat()
-        elif key in {
-            "id",
-            "sid",
-            "kind",
-            "title",
-            "name",
-            "artist",
-            "author",
-            "owner",
-            "thumbnail",
-            "navidromeId",
-            "album",
-            "views",
-            "subscribers",
-        }:
-            text = str(value).strip()
-            if text and text not in {"None", "null"}:
-                clean[key] = text
-    return clean
+    cleaned = _json_clean(item)
+    return cleaned if isinstance(cleaned, dict) else {}
 
 
 def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
@@ -102,7 +97,12 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
             logger.debug("Entdecken-Eintrag übersprungen ({}): {}", item_kind, exc)
             continue
         decorated.append({**item, "sid": subsonic_id, "starred": subsonic_id in starred, "kind": item_kind})
-    return [_json_item(item) for item in navidrome.enrich_items(decorated, kind)]
+    try:
+        enriched = navidrome.enrich_items(decorated, kind)
+    except Exception as exc:
+        logger.debug("Navidrome-Anreicherung übersprungen: {}", exc)
+        enriched = decorated
+    return [_json_item(item) for item in enriched if isinstance(item, dict)]
 
 
 # --------------------------------------------------------------------------
@@ -254,8 +254,16 @@ async def search(request: Request, q: str = "", scope: str = "all", limit: int =
         return {"songs": [], "albums": [], "artists": []}
 
     if scope == "all":
-        results = await catalog.search(q, song_limit=limit, album_limit=12, artist_limit=12)
-        library = await navidrome.search(q, limit=limit)
+        try:
+            results = await catalog.search(q, song_limit=limit, album_limit=12, artist_limit=12)
+        except Exception as exc:
+            logger.exception("Suche fehlgeschlagen: {}", exc)
+            results = {}
+        try:
+            library = await navidrome.search(q, limit=limit)
+        except Exception as exc:
+            logger.debug("Navidrome-Suche übersprungen: {}", exc)
+            library = {}
         ytm_songs = _decorate(results.get("songs") or [], "song")
         seen = {(song.get("navidromeId") or "").lower() for song in ytm_songs if song.get("navidromeId")}
         extra_songs = [
@@ -264,23 +272,25 @@ async def search(request: Request, q: str = "", scope: str = "all", limit: int =
             if (song.get("navidromeId") or "").lower() not in seen
         ]
         top = results.get("top")
-        return {
-            "top": (_decorate([top], top.get("kind") or "playlist") or [None])[0] if top else None,
-            "items": _decorate(results.get("items") or []),
-            "songs": ytm_songs,
-            "videos": _decorate(results.get("videos") or [], "song"),
-            "albums": _decorate(results.get("albums") or [], "album"),
-            "artists": _decorate(results.get("artists") or [], "artist"),
-            "playlists": _decorate(results.get("playlists") or [], "playlist"),
-            "community_playlists": _decorate(results.get("community_playlists") or [], "playlist"),
-            "podcasts": _decorate(results.get("podcasts") or [], "podcast"),
-            "episodes": _decorate(results.get("episodes") or [], "song"),
-            "library": {
-                "songs": _decorate(extra_songs, "song"),
-                "albums": library.get("albums") or [],
-                "artists": library.get("artists") or [],
-            },
-        }
+        return _json_clean(
+            {
+                "top": (_decorate([top], top.get("kind") or "playlist") or [None])[0] if top else None,
+                "items": _decorate(results.get("items") or []),
+                "songs": ytm_songs,
+                "videos": _decorate(results.get("videos") or [], "song"),
+                "albums": _decorate(results.get("albums") or [], "album"),
+                "artists": _decorate(results.get("artists") or [], "artist"),
+                "playlists": _decorate(results.get("playlists") or [], "playlist"),
+                "community_playlists": _decorate(results.get("community_playlists") or [], "playlist"),
+                "podcasts": _decorate(results.get("podcasts") or [], "podcast"),
+                "episodes": _decorate(results.get("episodes") or [], "song"),
+                "library": {
+                    "songs": _decorate(extra_songs, "song"),
+                    "albums": library.get("albums") or [],
+                    "artists": library.get("artists") or [],
+                },
+            }
+        )
 
     items = await catalog.search_scope(q, scope, limit)
     kind = {"songs": "song", "albums": "album", "artists": "artist", "playlists": "playlist"}.get(scope, "song")
@@ -300,11 +310,11 @@ async def album(request: Request, album_id: str):
         data = await navidrome.get_album(album_id)
         if data is None:
             raise HTTPException(status_code=404, detail="Album nicht gefunden")
-        return {**data, "sid": ids.album_id(album_id), "tracks": _decorate(data.get("tracks") or [], "song")}
+        return _json_clean({**data, "sid": ids.album_id(album_id), "tracks": _decorate(data.get("tracks") or [], "song")})
     data = await catalog.get_album(album_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Album nicht gefunden")
-    return {**data, "sid": ids.album_id(album_id), "tracks": _decorate(data.get("tracks") or [], "song")}
+    return _json_clean({**data, "sid": ids.album_id(album_id), "tracks": _decorate(data.get("tracks") or [], "song")})
 
 
 @router.get("/artist/{artist_id}")
@@ -314,32 +324,42 @@ async def artist(request: Request, artist_id: str):
         data = await navidrome.get_artist(artist_id)
         if data is None:
             raise HTTPException(status_code=404, detail="Interpret nicht gefunden")
-        return {
+        return _json_clean(
+            {
+                **data,
+                "sid": ids.artist_id(artist_id, data.get("name", "")),
+                "albums": _decorate(data.get("albums") or [], "album"),
+                "top_songs": _decorate(data.get("top_songs") or [], "song"),
+                "related": [],
+            }
+        )
+    data = await catalog.get_artist(artist_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Interpret nicht gefunden")
+    return _json_clean(
+        {
             **data,
             "sid": ids.artist_id(artist_id, data.get("name", "")),
             "albums": _decorate(data.get("albums") or [], "album"),
             "top_songs": _decorate(data.get("top_songs") or [], "song"),
-            "related": [],
+            "related": _decorate(data.get("related") or [], "artist"),
         }
-    data = await catalog.get_artist(artist_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail="Interpret nicht gefunden")
-    return {
-        **data,
-        "sid": ids.artist_id(artist_id, data.get("name", "")),
-        "albums": _decorate(data.get("albums") or [], "album"),
-        "top_songs": _decorate(data.get("top_songs") or [], "song"),
-        "related": _decorate(data.get("related") or [], "artist"),
-    }
+    )
 
 
 @router.get("/ytplaylist/{playlist_id}")
 async def yt_playlist(request: Request, playlist_id: str):
     _require_session(request)
-    data = await catalog.get_ytm_playlist(playlist_id)
+    try:
+        data = await catalog.get_ytm_playlist(playlist_id)
+    except Exception as exc:
+        logger.exception("Playlist {} fehlgeschlagen: {}", playlist_id, exc)
+        raise HTTPException(status_code=502, detail="Playlist konnte nicht geladen werden")
     if data is None:
         raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
-    return {**data, "tracks": _decorate(data.get("tracks") or [], "song")}
+    payload = {k: v for k, v in data.items() if k != "tracks"}
+    payload["tracks"] = _decorate(data.get("tracks") or [], "song")
+    return _json_clean(payload)
 
 
 @router.get("/radio/{video_id}")
