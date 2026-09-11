@@ -42,9 +42,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.middleware("http")
 async def attach_session(request: Request, call_next):
-    user = web_session.read(request)
-    if not user and not auth_store.password_required():
-        user = auth_store.username()
+    user = web_session.read(request) or auth_store.username()
     request.state.session_user = user
     return await call_next(request)
 

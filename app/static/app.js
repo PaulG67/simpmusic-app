@@ -40,8 +40,6 @@
     });
     if (response.status === 401) {
       localStorage.removeItem(TOKEN_KEY);
-      const login = $("login");
-      if (login && state.passwordRequired) login.hidden = false;
       const payload = await response.json().catch(() => ({}));
       const message = typeof payload.detail === "string" ? payload.detail : "Nicht angemeldet";
       throw new Error(message);
@@ -126,47 +124,6 @@
   });
 
   const { Player, Offline, EQ } = window.SM;
-
-  // ------------------------------------------------------------------ login
-
-  async function prefillLogin() {
-    try {
-      const hint = await fetch("/api/login-hint", { credentials: "include" }).then((r) => r.json());
-      state.passwordRequired = !!hint.passwordRequired;
-      if ($("login-user-label")) {
-        $("login-user-label").textContent = hint.username || "musicplay";
-      }
-      if ($("login-pass-len")) {
-        $("login-pass-len").textContent = hint.passwordRequired ? String(hint.passwordLength || "?") : "kein";
-      }
-      if ($("login-version") && hint.version) {
-        $("login-version").textContent = "v" + hint.version;
-      }
-      if (!hint.passwordRequired && $("login")) $("login").hidden = true;
-    } catch (_error) {
-      if ($("login-user-label")) $("login-user-label").textContent = "musicplay";
-      if ($("login")) $("login").hidden = true;
-    }
-  }
-
-  if ($("login-form")) $("login-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const error = $("login-error");
-    error.hidden = true;
-    try {
-      const data = await api("/api/login", {
-        method: "POST",
-        body: { password: $("login-password").value.trim() },
-      });
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
-      if ($("login")) $("login").hidden = true;
-      $("login-password").value = "";
-      boot();
-    } catch (exception) {
-      error.textContent = exception.message || "Anmeldung fehlgeschlagen.";
-      error.hidden = false;
-    }
-  });
 
   // ------------------------------------------------------------- navigation
 
@@ -1688,15 +1645,10 @@
   });
 
   async function boot() {
-    const session = await api("/api/session");
+    document.getElementById("login")?.remove();
+    const session = await api("/api/session").catch(() => ({ user: null, passwordRequired: false }));
     state.passwordRequired = !!session.passwordRequired;
-    if (!session.authenticated && session.passwordRequired) {
-      if ($("login")) $("login").hidden = false;
-      return;
-    }
-
     state.user = session.user;
-    if ($("login")) $("login").hidden = true;
     $("offline-badge").hidden = navigator.onLine;
 
     try {
@@ -1722,8 +1674,9 @@
       .catch(() => {});
   }
 
-  prefillLogin();
   boot().catch(() => {
-    if (state.passwordRequired && $("login")) $("login").hidden = false;
+    document.getElementById("login")?.remove();
+    state.route = { name: "home" };
+    render(state.route);
   });
 })();

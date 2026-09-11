@@ -4,24 +4,12 @@
    ranges - so downloaded tracks are stored as one complete response and sliced
    here into 206 replies. */
 
-const SHELL_CACHE = "music-play-shell-v4";
 const AUDIO_CACHE = "music-play-audio-v1";
 const COVER_CACHE = "music-play-covers-v1";
-
-const SHELL_FILES = [
-  "/static/icons/icon.svg",
-  "/manifest.webmanifest",
-];
-
-const KEEP = [SHELL_CACHE, AUDIO_CACHE, COVER_CACHE];
+const KEEP = [AUDIO_CACHE, COVER_CACHE];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_FILES))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
@@ -100,6 +88,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (request.destination === "document" || url.pathname === "/") {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
+
   if (url.pathname.startsWith("/api/stream/")) {
     event.respondWith(handleAudio(request));
     return;
@@ -108,18 +101,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(handleCover(request));
     return;
   }
-  // Everything else under /api and /rest must stay live.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/rest/")) return;
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok && SHELL_FILES.includes(url.pathname)) {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
+    fetch(request).catch(() => caches.match(request).then((cached) => cached || fetch(request)))
   );
 });

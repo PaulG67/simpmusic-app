@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Music Play</title>
+  <title>Music Play 1.2.0</title>
 
   <meta name="theme-color" content="#0d0f14">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,6 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Music Play">
   <meta name="referrer" content="no-referrer">
+  <style>#login,.login{display:none!important}</style>
 
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -18,22 +19,7 @@
   <link rel="stylesheet" href="/static/styles.css?v={{ version }}">
 </head>
 <body>
-
-{% if password_required %}
-<div id="login" class="login" hidden>
-  <div class="login-card">
-    <img src="/static/icons/icon.svg" alt="" width="72" height="72">
-    <h1>Music Play</h1>
-    <p>Passwort aus <em>Mehr → Zugang</em> eingeben.</p>
-    <p class="login-account">Benutzer: <strong id="login-user-label">musicplay</strong> · <span id="login-version"></span></p>
-    <form id="login-form" method="post" action="/api/login">
-      <input type="password" name="password" id="login-password" placeholder="Passwort" autocomplete="current-password" required>
-      <button type="submit">Anmelden</button>
-    </form>
-    <p class="login-error" id="login-error" hidden></p>
-  </div>
-</div>
-{% endif %}
+<script>document.getElementById("login")?.remove();</script>
 
 <header id="topbar">
   <button class="icon-button" id="back-button" hidden aria-label="Zurück">&#8592;</button>
