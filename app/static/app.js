@@ -40,7 +40,8 @@
     });
     if (response.status === 401) {
       localStorage.removeItem(TOKEN_KEY);
-      if (state.passwordRequired) $("login").hidden = false;
+      const login = $("login");
+      if (login && state.passwordRequired) login.hidden = false;
       const payload = await response.json().catch(() => ({}));
       const message = typeof payload.detail === "string" ? payload.detail : "Nicht angemeldet";
       throw new Error(message);
@@ -141,14 +142,14 @@
       if ($("login-version") && hint.version) {
         $("login-version").textContent = "v" + hint.version;
       }
-      if (!hint.passwordRequired) $("login").hidden = true;
+      if (!hint.passwordRequired && $("login")) $("login").hidden = true;
     } catch (_error) {
       if ($("login-user-label")) $("login-user-label").textContent = "musicplay";
-      $("login").hidden = true;
+      if ($("login")) $("login").hidden = true;
     }
   }
 
-  $("login-form").addEventListener("submit", async (event) => {
+  if ($("login-form")) $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const error = $("login-error");
     error.hidden = true;
@@ -158,7 +159,7 @@
         body: { password: $("login-password").value.trim() },
       });
       if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
-      $("login").hidden = true;
+      if ($("login")) $("login").hidden = true;
       $("login-password").value = "";
       boot();
     } catch (exception) {
@@ -1690,12 +1691,12 @@
     const session = await api("/api/session");
     state.passwordRequired = !!session.passwordRequired;
     if (!session.authenticated && session.passwordRequired) {
-      $("login").hidden = false;
+      if ($("login")) $("login").hidden = false;
       return;
     }
 
     state.user = session.user;
-    $("login").hidden = true;
+    if ($("login")) $("login").hidden = true;
     $("offline-badge").hidden = navigator.onLine;
 
     try {
@@ -1714,11 +1715,15 @@
   }
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
+      .then(() => navigator.serviceWorker.register("/sw.js"))
+      .catch(() => {});
   }
 
   prefillLogin();
   boot().catch(() => {
-    if (state.passwordRequired) $("login").hidden = false;
+    if (state.passwordRequired && $("login")) $("login").hidden = false;
   });
 })();

@@ -58,7 +58,11 @@ async def index(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"version": APP_VERSION, "authenticated": bool(request.state.session_user)},
+        context={
+            "version": APP_VERSION,
+            "authenticated": bool(request.state.session_user),
+            "password_required": auth_store.password_required(),
+        },
         headers={"Cache-Control": "no-store"},
     )
 

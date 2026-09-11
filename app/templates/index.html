@@ -19,12 +19,13 @@
 </head>
 <body>
 
+{% if password_required %}
 <div id="login" class="login" hidden>
   <div class="login-card">
     <img src="/static/icons/icon.svg" alt="" width="72" height="72">
     <h1>Music Play</h1>
-    <p>Nur das Unraid-Feld «Passwort» eingeben – nicht den Benutzernamen und nicht den Config-Pfad.</p>
-    <p class="login-account">Benutzer: <strong id="login-user-label">musicplay</strong> · Passwort: <strong id="login-pass-len">?</strong> Zeichen · <span id="login-version"></span></p>
+    <p>Passwort aus <em>Mehr → Zugang</em> eingeben.</p>
+    <p class="login-account">Benutzer: <strong id="login-user-label">musicplay</strong> · <span id="login-version"></span></p>
     <form id="login-form" method="post" action="/api/login">
       <input type="password" name="password" id="login-password" placeholder="Passwort" autocomplete="current-password" required>
       <button type="submit">Anmelden</button>
@@ -32,6 +33,7 @@
     <p class="login-error" id="login-error" hidden></p>
   </div>
 </div>
+{% endif %}
 
 <header id="topbar">
   <button class="icon-button" id="back-button" hidden aria-label="Zurück">&#8592;</button>

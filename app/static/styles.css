@@ -390,6 +390,7 @@ dl.info dd { margin: 0; word-break: break-all; }
   place-items: center;
   padding: 24px;
 }
+.login[hidden] { display: none !important; }
 .login-card { max-width: 340px; text-align: center; }
 .login-card img { margin: 0 auto 16px; }
 .login-card h1 { margin: 0 0 6px; font-size: 24px; }
