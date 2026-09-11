@@ -11,7 +11,7 @@ import hmac
 from fastapi import Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from app.core.settings import settings
+from app.core.settings import clean_secret, settings
 
 COOKIE_NAME = "music_play_session"
 MAX_AGE = 60 * 60 * 24 * 90
@@ -28,7 +28,7 @@ def secrets_equal(left: str | None, right: str | None) -> bool:
 
 
 def check_password(password: str) -> bool:
-    return secrets_equal(password, settings.subsonic_password)
+    return secrets_equal(clean_secret(password), settings.subsonic_password)
 
 
 def issue(username: str) -> str:
@@ -37,6 +37,10 @@ def issue(username: str) -> str:
 
 def read(request: Request) -> str | None:
     token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        header = request.headers.get("Authorization") or ""
+        if header.lower().startswith("bearer "):
+            token = header.split(" ", 1)[1].strip()
     if not token:
         return None
     try:

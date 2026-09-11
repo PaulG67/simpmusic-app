@@ -62,6 +62,7 @@ async def index(request: Request):
         request=request,
         name="index.html",
         context={"version": APP_VERSION, "authenticated": bool(request.state.session_user)},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -93,7 +94,7 @@ async def favicon():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.get("/version")

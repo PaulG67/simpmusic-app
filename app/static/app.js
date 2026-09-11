@@ -4,8 +4,8 @@
 (() => {
   "use strict";
 
-  const { Player, Offline, EQ } = window.SM;
   const $ = (id) => document.getElementById(id);
+  const TOKEN_KEY = "music_play_token";
 
   const state = {
     user: null,
@@ -28,13 +28,17 @@
   // ---------------------------------------------------------------- helpers
 
   async function api(path, options = {}) {
+    const headers = { "Content-Type": "application/json" };
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers.Authorization = "Bearer " + token;
     const response = await fetch(path, {
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       ...options,
+      headers: { ...headers, ...(options.headers || {}) },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     if (response.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
       $("login").hidden = false;
       const payload = await response.json().catch(() => ({}));
       const message = typeof payload.detail === "string" ? payload.detail : "Nicht angemeldet";
@@ -119,14 +123,23 @@
     if (event.target === $("sheet")) closeSheet();
   });
 
+  const { Player, Offline, EQ } = window.SM;
+
   // ------------------------------------------------------------------ login
 
   async function prefillLogin() {
+    if (new URLSearchParams(location.search).get("login") === "fail") {
+      $("login").hidden = false;
+      $("login-error").textContent = "Passwort falsch";
+      $("login-error").hidden = false;
+    }
     try {
-      const hint = await fetch("/api/login-hint", { credentials: "same-origin" }).then((r) => r.json());
-      if (hint.username && !$("login-user").value) $("login-user").value = hint.username;
+      const hint = await fetch("/api/login-hint", { credentials: "include" }).then((r) => r.json());
+      if ($("login-user-label")) {
+        $("login-user-label").textContent = hint.username || "musicplay";
+      }
     } catch (_error) {
-      if (!$("login-user").value) $("login-user").value = "musicplay";
+      if ($("login-user-label")) $("login-user-label").textContent = "musicplay";
     }
   }
 
@@ -135,13 +148,11 @@
     const error = $("login-error");
     error.hidden = true;
     try {
-      await api("/api/login", {
+      const data = await api("/api/login", {
         method: "POST",
-        body: {
-          username: $("login-user").value.trim(),
-          password: $("login-password").value,
-        },
+        body: { password: $("login-password").value },
       });
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
       $("login").hidden = true;
       $("login-password").value = "";
       boot();
@@ -935,6 +946,7 @@
           text: "Abmelden",
           onclick: async () => {
             await api("/api/logout", { method: "POST" });
+            localStorage.removeItem(TOKEN_KEY);
             location.reload();
           },
         }),

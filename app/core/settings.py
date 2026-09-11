@@ -1,5 +1,6 @@
 import os
 import secrets
+import unicodedata
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 APP_NAME = "Music Play"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 SUBSONIC_API_VERSION = "1.16.1"
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
@@ -19,6 +20,14 @@ LOG_DIR = Path(os.getenv("LOG_DIR", "/logs"))
 load_dotenv(CONFIG_DIR / ".env")
 
 
+def clean_secret(value: str | None) -> str:
+    """Normalize Unraid/env/browser secrets so visually equal values match."""
+    text = (value or "").replace("\x00", "").strip().lstrip("\ufeff")
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {'"', "'"}:
+        text = text[1:-1].strip()
+    return unicodedata.normalize("NFC", text)
+
+
 def _env(name: str, default: str = "") -> str:
     """Read an env var, treating blank Unraid fields as unset.
 
@@ -26,11 +35,9 @@ def _env(name: str, default: str = "") -> str:
     empty. `os.getenv("SUBSONIC_PASSWORD", "musicplay")` would then return ""
     instead of the default, and login would reject every non-empty password.
     """
-    value = os.getenv(name)
-    if value is None:
-        return default
-    stripped = str(value).strip().lstrip("\ufeff")
-    return stripped if stripped else default
+    raw = os.getenv(name)
+    cleaned = clean_secret(raw) if raw is not None else ""
+    return cleaned if cleaned else default
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -111,7 +118,11 @@ class Settings(BaseModel):
 for _directory in (CONFIG_DIR, CACHE_DIR, LOG_DIR):
     _directory.mkdir(parents=True, exist_ok=True)
 
-settings = Settings(session_secret=_session_secret())
+settings = Settings(
+    session_secret=_session_secret(),
+    subsonic_user=_env("SUBSONIC_USER", "musicplay"),
+    subsonic_password=_env("SUBSONIC_PASSWORD", "musicplay"),
+)
 
 settings.audio_cache_dir.mkdir(parents=True, exist_ok=True)
 settings.cover_cache_dir.mkdir(parents=True, exist_ok=True)

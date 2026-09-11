@@ -1,8 +1,10 @@
 """JSON API consumed by the built-in web player."""
 
 from fastapi import APIRouter, Body, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import session as web_session
+from app.core.logging import logger
 from app.core.settings import APP_VERSION, settings
 from app.db import repo
 from app.db.database import session_scope
@@ -62,32 +64,63 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
 
 @router.get("/login-hint")
 async def login_hint():
-    return {"username": settings.subsonic_user}
+    return {
+        "username": settings.subsonic_user,
+        "passwordLength": len(settings.subsonic_password),
+        "version": APP_VERSION,
+    }
 
 
-@router.post("/login")
-async def login(response: Response, payload: dict = Body(...)):
-    username = (payload.get("username") or "").strip() or settings.subsonic_user
-    password = payload.get("password") or ""
-    user_ok = web_session.secrets_equal(username, settings.subsonic_user)
-    pass_ok = web_session.check_password(password)
-    if not user_ok or not pass_ok:
-        raise HTTPException(status_code=401, detail="Benutzername oder Passwort falsch")
-
+def _set_session_cookie(response: Response, token: str, request: Request) -> None:
     response.set_cookie(
         web_session.COOKIE_NAME,
-        web_session.issue(settings.subsonic_user),
+        token,
         max_age=web_session.MAX_AGE,
         httponly=True,
         samesite="lax",
         path="/",
+        secure=request.url.scheme == "https",
     )
-    return {"user": settings.subsonic_user}
+
+
+@router.post("/login")
+async def login(request: Request):
+    content_type = (request.headers.get("content-type") or "").lower()
+    wants_json = "application/json" in content_type
+    if wants_json:
+        payload = await request.json()
+    else:
+        form = await request.form()
+        payload = {"password": form.get("password")}
+
+    password = payload.get("password") or ""
+    if not web_session.check_password(password):
+        logger.warning(
+            "Login fehlgeschlagen: Eingabe {} Zeichen, konfiguriert {} Zeichen",
+            len(web_session.clean_secret(password)),
+            len(settings.subsonic_password),
+        )
+        if wants_json:
+            raise HTTPException(status_code=401, detail="Passwort falsch")
+        return RedirectResponse("/?login=fail", status_code=303)
+
+    token = web_session.issue(settings.subsonic_user)
+    logger.info("Web-Login erfolgreich")
+    if wants_json:
+        response = JSONResponse(
+            {"user": settings.subsonic_user, "token": token, "version": APP_VERSION}
+        )
+        _set_session_cookie(response, token, request)
+        return response
+
+    redirect = RedirectResponse("/", status_code=303)
+    _set_session_cookie(redirect, token, request)
+    return redirect
 
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(web_session.COOKIE_NAME)
+    response.delete_cookie(web_session.COOKIE_NAME, path="/")
     return {"ok": True}
 
 

@@ -394,6 +394,8 @@ dl.info dd { margin: 0; word-break: break-all; }
 .login-card img { margin: 0 auto 16px; }
 .login-card h1 { margin: 0 0 6px; font-size: 24px; }
 .login-card p { color: var(--text-dim); font-size: 14px; margin: 0 0 18px; }
+.login-account { margin: -8px 0 14px !important; }
+.login-account strong { color: var(--text); }
 .login-card input {
   width: 100%;
   padding: 13px 15px;
