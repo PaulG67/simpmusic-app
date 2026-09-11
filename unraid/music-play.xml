@@ -10,20 +10,11 @@
   <Support>https://github.com/PaulG67/music-play/issues</Support>
   <Project>https://github.com/PaulG67/music-play</Project>
   <Overview>
-    Music Play stellt YouTube Music als selbst gehostete Web-App (PWA) bereit und
-    spricht gleichzeitig die Subsonic-Schnittstelle. Damit laesst sich die Musik im
-    Safari auf dem iPhone abspielen und ebenso mit Subsonic-Clients wie Amperfy nutzen.
-
-    Enthalten: werbefreies Streaming, Offline-Downloads, Charts/Stimmungen/Podcasts,
-    synchronisierte Songtexte, optional KI-Uebersetzung, 10-Band-Equalizer mit AutoEq,
-    Crossfade, Sleep-Timer, SponsorBlock, ReturnYouTubeDislike, Hoerstatistiken und
-    Jahresrueckblick. CarPlay kommt ueber Amperfy (Android Auto kann ein Browser nicht).
-
-    Vorlage einmalig auf Unraid: bash /mnt/user/appdata/music-play/unraid/install-template.sh
-    Danach: Docker → Container hinzufügen → Template music-play → Passwort setzen → Apply.
-
-    Nach dem Start: Weboberflaeche oeffnen, mit SUBSONIC_PASSWORD anmelden.
-    In Amperfy einen Subsonic-Server mit derselben URL, Benutzer und Passwort anlegen.
+    Music Play stellt YouTube Music als selbst gehostete Web-App (PWA) bereit.
+    Suche, Startseite und Vorschlaege kommen von YouTube Music. Bibliothek,
+    Playlists und Downloads koennen an Navidrome gehen; Abspielen dann von dort.
+    Titel lassen sich ausserdem an MediaSync zum Download in eine dortige Playlist
+    uebergeben. Zusaetzlich spricht die App Subsonic fuer Amperfy/CarPlay.
   </Overview>
   <Category>MediaApp:Music</Category>
   <WebUI>http://[IP]:[PORT:5080]/</WebUI>
@@ -120,6 +111,38 @@
   <Config Name="Zielsprache Übersetzung" Target="TRANSLATE_TARGET" Default="" Mode=""
           Description="Leer = YTM_LANGUAGE. z.B. de, en, fr."
           Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Navidrome-URL" Target="NAVIDROME_URL" Default="" Mode=""
+          Description="z.B. http://192.168.0.188:4533 – auch spaeter in der App unter Mehr aenderbar."
+          Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Navidrome-Benutzer" Target="NAVIDROME_USER" Default="" Mode=""
+          Description="Navidrome-Login. Kann in der App unter Mehr gesetzt werden."
+          Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Navidrome-Passwort" Target="NAVIDROME_PASSWORD" Default="" Mode=""
+          Description="Navidrome-Passwort. Sicherer spaeter in der App unter Mehr eintragen."
+          Type="Variable" Display="always" Required="false" Mask="true"></Config>
+
+  <Config Name="Musikbibliothek" Target="/music" Default="/mnt/user/music" Mode="rw"
+          Description="Denselben Ordner wie Navidrome einhaengen. Downloads landen in /music/YouTube/..."
+          Type="Path" Display="always" Required="false" Mask="false">/mnt/user/music</Config>
+
+  <Config Name="Navidrome-Importordner" Target="NAVIDROME_IMPORT_FOLDER" Default="YouTube" Mode=""
+          Description="Unterordner in der Musikbibliothek fuer YouTube-Imports."
+          Type="Variable" Display="advanced" Required="false" Mask="false">YouTube</Config>
+
+  <Config Name="MediaSync-URL" Target="MEDIASYNC_URL" Default="" Mode=""
+          Description="z.B. http://192.168.0.188:8090 – auch spaeter in der App unter Mehr aenderbar."
+          Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="MediaSync-Benutzer" Target="MEDIASYNC_USER" Default="" Mode=""
+          Description="Nur noetig, wenn MediaSync eine Anmeldung verlangt. Auch unter Mehr setzbar."
+          Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="MediaSync-Passwort" Target="MEDIASYNC_PASSWORD" Default="" Mode=""
+          Description="Optional. Sicherer spaeter in der App unter Mehr eintragen."
+          Type="Variable" Display="always" Required="false" Mask="true"></Config>
 
   <Config Name="Zeitzone" Target="TZ" Default="Europe/Zurich" Mode=""
           Description="Zeitzone für Statistiken und Jahresrückblick."

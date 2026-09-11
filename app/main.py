@@ -12,6 +12,8 @@ from app.core.icons import ensure_icons
 from app.core.logging import logger
 from app.core.settings import APP_NAME, APP_VERSION, settings
 from app.db.database import init_db
+from app.navidrome import bridge as navidrome
+from app.navidrome import config as navidrome_config
 from app.subsonic import media
 from app.subsonic.router import router as subsonic_router
 
@@ -23,13 +25,15 @@ async def lifespan(_: FastAPI):
     init_db()
     ensure_icons()
     logger.info(
-        "{} {} gestartet - Benutzer '{}', Streaming '{}', Passwort {}",
+        "{} {} gestartet - Benutzer '{}', Streaming '{}', Passwort {}, Navidrome {}",
         APP_NAME,
         APP_VERSION,
         auth_store.username(),
         settings.stream_mode,
         "gesetzt" if auth_store.password_required() else "offen",
+        "verbunden" if navidrome_config.configured() else "aus",
     )
+    navidrome.warm_index()
     yield
     await media.aclose()
 

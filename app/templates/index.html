@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Music Play 1.2.1</title>
+  <title>Music Play 1.3.3</title>
 
   <meta name="theme-color" content="#0d0f14">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -52,17 +52,29 @@
 
   <div class="np-controls">
     <button class="icon-button" id="np-shuffle" aria-label="Zufall">&#8646;</button>
+    <button class="icon-button" id="np-skip-back" aria-label="10 Sekunden zurück">−10</button>
     <button class="icon-button" id="np-prev" aria-label="Zurück">&#9198;</button>
     <button class="icon-button primary" id="np-toggle" aria-label="Abspielen">&#9654;</button>
     <button class="icon-button" id="np-next" aria-label="Weiter">&#9197;</button>
+    <button class="icon-button" id="np-skip-fwd" aria-label="10 Sekunden vor">+10</button>
     <button class="icon-button" id="np-repeat" aria-label="Wiederholen">&#128257;</button>
+  </div>
+
+  <div class="np-volume">
+    <button class="icon-button" id="np-mute" aria-label="Stumm">&#128266;</button>
+    <input type="range" id="np-volume" min="0" max="100" value="100" step="1" aria-label="Lautstärke">
+    <span id="np-volume-label">100%</span>
   </div>
 
   <div class="np-actions">
     <button id="np-star" class="chip">&#9825; Favorit</button>
-    <button id="np-download" class="chip">&#8595; Offline</button>
+    <button id="np-navidrome" class="chip">&#8595; In Navidrome</button>
+    <button id="np-mediasync" class="chip">MediaSync</button>
+    <button id="np-offline" class="chip">&#8595; Offline</button>
+    <button id="np-playlist" class="chip">+ Playlist</button>
     <button id="np-radio" class="chip">&#9835; Radio</button>
     <button id="np-lyrics-toggle" class="chip">Songtext</button>
+    <button id="np-rate" class="chip">1×</button>
     <button id="np-sleep" class="chip">&#9203; Sleep</button>
     <button id="np-eq" class="chip">Equalizer</button>
   </div>
@@ -84,6 +96,7 @@
     <strong id="mini-title">–</strong>
     <span id="mini-artist"></span>
   </div>
+  <button class="icon-button" id="mini-prev" aria-label="Zurück">&#9198;</button>
   <button class="icon-button" id="mini-toggle" aria-label="Abspielen">&#9654;</button>
   <button class="icon-button" id="mini-next" aria-label="Weiter">&#9197;</button>
 </div>

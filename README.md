@@ -2,7 +2,10 @@
 
 YouTube Music als selbst gehostete Docker-App auf Unraid – bedienbar im Safari auf dem
 iPhone **und** über die Subsonic-Schnittstelle, an die sich [Amperfy](https://github.com/BLeeEZ/amperfy)
-direkt anhängt.
+direkt anhängt. Optional kombiniert sie Entdecken von YouTube Music mit deiner
+**Navidrome**-Bibliothek: Suche und Vorschläge von YouTube, Abspielen und Downloads von Navidrome.
+Optional übergibst du einen Titel an **MediaSync** auf demselben Unraid – inkl. Auswahl einer
+dortigen Playlist.
 
 Die Funktionsliste orientiert sich an [SimpMusic](https://simpmusic.org). Wo eine native
 Android-App etwas kann, das ein Browser nicht kann, steht das unten klar dabei.
@@ -18,12 +21,14 @@ Amperfy. Beide Zugänge sprechen dieselbe Datenbasis: Was du im Browser als Favo
 markierst, taucht in Amperfy auf und umgekehrt.
 
 ```
-                 ┌──────────────────────────────┐
- iPhone Safari ──►  PWA  ─┐                     │
-                 │        ├─ FastAPI ─ ytmusicapi ──► YouTube Music (Metadaten)
- Amperfy ────────►  /rest ┘     │      yt-dlp   ──► YouTube (Audio)
-   (Subsonic)    │              └─ SQLite (Favoriten, Playlists, Verlauf, Stats)
-                 └──────────────────────────────┘
+                 ┌──────────────────────────────────────────┐
+ iPhone Safari ──►  PWA  ─┐                                 │
+                 │        ├─ FastAPI ─ ytmusicapi ──► YouTube Music (Suche, Start, Vorschläge)
+ Amperfy ────────►  /rest ┘     │      yt-dlp   ──► YouTube (nur wenn der Titel nicht in Navidrome liegt)
+   (Subsonic)                     │              ├─ SQLite (Favoriten, Verlauf, Zuordnung)
+                 │              ├─ Navidrome (Bibliothek, Playlists, Download, Wiedergabe)
+                 │              └─ MediaSync (optional: Download in Jellyfin-Playlist)
+                 └──────────────────────────────────────────┘
 ```
 
 ## Funktionsabdeckung gegenüber SimpMusic
@@ -32,7 +37,7 @@ markierst, taucht in Amperfy auf und umgekehrt.
 |---|---|---|
 | Werbefreies Streaming | ja | YouTube-Music-Audio ohne Werbung |
 | Hintergrund / Bildschirm aus | ja, mit Einschränkung | PWA + MediaSession; Equalizer aus lassen (siehe unten) |
-| Offline-Modus | ja | Downloads im Browser (Cache API), auch ganze Playlists |
+| Offline-Modus | ja | Browser-Cache **oder** Download nach Navidrome (NAS) |
 | Intelligentes Caching | ja | Server-Cache **und** Geräte-Cache |
 | Synchronisierte Songtexte | ja | Zeile für Zeile, wenn YouTube Music Timestamps liefert |
 | KI-Übersetzung | ja, optional | LibreTranslate oder beliebiger OpenAI-kompatibler Endpunkt |
@@ -61,11 +66,11 @@ Wer sie braucht: einschalten und testen; bei Problemen ausschalten und die Seite
 
 ### Offline
 
-Titel und ganze Playlists lassen sich auf das Gerät herunterladen (*⋯ → Offline speichern*
-bzw. *Alle offline*). Der Service Worker beantwortet auch Byte-Range-Anfragen, damit
-`<audio>` seeken kann. Safari räumt Caches unter Speicherdruck auf – deshalb fragt die
-App nach persistentem Speicher. Das ist robuster als ein Tab, aber nicht so robust wie
-eine native App.
+Mit Navidrome: *Nach Navidrome* speichert den Titel in deine Musikbibliothek auf dem NAS
+(*⋯ → Nach Navidrome laden*). Danach spielt die App die lokale Datei. Zusätzlich kannst
+du weiter eine Kopie *aufs Gerät* legen (Browser-Cache). Ohne Navidrome bleibt nur der
+Geräte-Download wie bisher. Safari räumt Caches unter Speicherdruck auf – die NAS-Kopie
+ist die dauerhafte Variante.
 
 ### KI-Übersetzung
 
@@ -90,20 +95,22 @@ Android Auto gibt es nur für native Android-Apps. Amperfy spricht Subsonic und 
 CarPlay mit – das ist hier das Gegenstück. In Amperfy denselben Server eintragen wie in
 der Weboberfläche unter *Mehr*.
 
-## Wichtig: wie die Bibliothek gedacht ist
+## Wichtig: YouTube Music und Navidrome
 
-Amperfy synchronisiert beim Verbinden die **gesamte** Bibliothek eines Servers. YouTube
-Music hat aber keine endliche Bibliothek. Deshalb ist die Aufteilung so:
+Suche, Startseite, Charts und Radio kommen **live von YouTube Music**. Navidrome ist
+die eigene Bibliothek: was schon dort liegt, wird von dort abgespielt. Download und
+Playlists gehen nach Navidrome (Ordner `YouTube/` in deiner Musikbibliothek), danach
+scannt Navidrome und der Titel ist dauerhaft auf dem NAS.
 
-* **Bibliothek** = was du kuratierst: Favoriten, deine Playlists, dein Wiedergabeverlauf,
-  abonnierte Podcasts. Das ist klein und synchronisiert in Sekunden.
-* **Suche / Entdecken** = live gegen YouTube Music. Du kannst also auch in Amperfy alles
-  suchen und sofort abspielen, ohne dass es vorher in der Bibliothek war.
-* Zusätzlich taucht eine Playlist **„Charts \<Region\>"** auf, damit direkt nach der
-  Einrichtung Inhalt da ist.
+Ohne Navidrome verhält sich die App wie bisher: YouTube-Wiedergabe, Favoriten in
+SQLite, optional Offline im Browser.
 
-Direkt nach der Installation ist die Bibliothek also leer – das ist kein Fehler. Markiere
-im Browser ein paar Titel als Favorit, dann füllt sich Amperfy.
+Amperfy hängt weiter an *dieser* App (Subsonic), nicht an Navidrome. Die Navidrome-
+WebUI bleibt parallel nutzbar.
+
+Direkt nach der Installation ist die lokale Favoritenliste leer – das ist kein Fehler.
+Navidrome-Alben und -Playlists erscheinen in *Bibliothek*, sobald die Verbindung unter
+*Mehr → Navidrome* steht.
 
 ## Installation auf Unraid
 
@@ -128,6 +135,10 @@ WebUI: `http://<unraid-ip>:5080`
 Beim ersten Start ist **kein Passwort** nötig. Unter **Mehr → Zugang** kannst du
 später Benutzername und Passwort setzen (gilt auch für Amperfy). Das Unraid-Feld
 Passwort wird ignoriert.
+
+Navidrome: unter **Mehr → Navidrome** URL, Benutzer und Passwort eintragen. In der
+Unraid-Vorlage denselben **Musik**-Share wie Navidrome nach `/music` einhängen
+(Standard `/mnt/user/music`). Imports landen in `/music/YouTube/<Interpret>/<Album>/`.
 
 Das Image kommt von `ghcr.io/paulg67/music-play:latest`. Updates später über
 **Docker → music-play → Force Update**.
@@ -196,7 +207,40 @@ Alle Werte als Umgebungsvariablen, siehe `.env.example`:
 | `TRANSLATE_API_KEY` | – | Optional |
 | `TRANSLATE_MODEL` | `gpt-4o-mini` | Nur bei `openai` |
 | `TRANSLATE_TARGET` | – | Zielsprache, sonst `YTM_LANGUAGE` |
+| `NAVIDROME_URL` | – | z.B. `http://192.168.0.188:4533` (auch in der App unter Mehr) |
+| `NAVIDROME_USER` / `NAVIDROME_PASSWORD` | – | Navidrome-Login |
+| `NAVIDROME_MUSIC_DIR` | `/music` | Schreibender Mount der Navidrome-Musikbibliothek |
+| `NAVIDROME_IMPORT_FOLDER` | `YouTube` | Unterordner für Imports |
+| `MEDIASYNC_URL` | – | z.B. `http://192.168.0.188:8090` (auch in der App unter Mehr) |
+| `MEDIASYNC_USER` / `MEDIASYNC_PASSWORD` | – | nur wenn MediaSync Anmeldung verlangt |
 | `LOG_LEVEL` | `INFO` | Protokollierung |
+
+### Navidrome
+
+1. In Unraid denselben Musikordner wie bei Navidrome als Pfad `/music` einhängen.
+2. In der App *Mehr → Navidrome*: URL (die Navidrome-WebUI), Benutzer, Passwort.
+3. Suche bleibt YouTube Music. Treffer, die schon in Navidrome liegen, zeigen das Badge
+   **Navidrome** und werden von dort gestreamt.
+4. *Nach Navidrome* lädt den Titel per yt-dlp in `/music/YouTube/...`, startet einen
+   Scan und spielt danach die lokale Datei.
+5. Eigene Playlists werden mitgespiegelt, sobald die Titel in Navidrome existieren.
+
+Ohne beschreibbaren Musikordner geht Wiedergabe aus Navidrome trotzdem – nur der Import
+nicht.
+
+### MediaSync
+
+MediaSync lädt Titel über MusiKat in die Jellyfin-Bibliothek. Music Play schickt nur
+Interpret + Titel (und optional eine Ziel-Playlist) dorthin.
+
+1. MediaSync-Container auf **0.2.0** aktualisieren (Ingest-API `POST /api/ingest`).
+   Ohne dieses Update antwortet MediaSync mit 404.
+2. In der App *Mehr → MediaSync*: URL der MediaSync-WebUI, z.B.
+   `http://192.168.0.188:<Port>`. Benutzer/Passwort nur, wenn MediaSync das verlangt.
+3. Im Player **MediaSync** tippen (oder im Titelmenü *An MediaSync senden*).
+4. Ziel wählen: **Nur Bibliothek**, eine bestehende Playlist dort, oder *Neue Playlist*.
+
+MediaSync sucht den Titel, lädt ihn und hängt ihn bei Bedarf an die gewählte Jellyfin-Playlist.
 
 ### `STREAM_MODE`
 
@@ -240,8 +284,12 @@ verzögert. `TRANSCODE_TO_AAC=true` muss dafür gesetzt sein.
 Web Audio auf iOS. Equalizer und Crossfade ausschalten, Seite neu laden.
 
 **Amperfy zeigt eine leere Bibliothek**
-Erwartetes Verhalten, siehe oben. Erst Favoriten setzen, dann in Amperfy neu
-synchronisieren.
+Erwartetes Verhalten für YouTube-Favoriten. Navidrome-Inhalte siehst du in der PWA unter
+*Bibliothek*. In Amperfy weiter diese App eintragen, nicht Navidrome selbst.
+
+**Navidrome-Import: „Musikordner nicht beschreibbar"**
+Container und Navidrome müssen denselben Share sehen. Unraid: Pfad *Musikbibliothek*
+auf `/mnt/user/music` (oder deinen Navidrome-Ordner), Target `/music`.
 
 **Suche liefert nichts**
 Region oder Sprache prüfen (`YTM_LOCATION`, `YTM_LANGUAGE`) und ob der Container ins
@@ -251,6 +299,10 @@ Internet kommt. Im Log stehen die Fehler von ytmusicapi im Klartext.
 `TRANSLATE_PROVIDER` und `TRANSLATE_URL` müssen gesetzt sein. Unter *Mehr* steht der
 aktuelle Status.
 
+**MediaSync: „keine Ingest-API"**
+Der laufende MediaSync-Container ist älter als 0.2.0. Image neu bauen und den Container
+neu starten. Unter *Mehr* muss die URL erreichbar sein (`/health`).
+
 ## Projektstruktur
 
 ```
@@ -258,6 +310,8 @@ app/
   core/       Konfiguration, Logging, Icon-Erzeugung
   db/         SQLAlchemy-Modelle und Bibliotheks-Zugriffe
   ytm/        ytmusicapi-Wrapper, ID-Schema, Normalisierung, yt-dlp-Streaming
+  navidrome/  Navidrome-Client, Matching, Import in die Musikbibliothek
+  mediasync/  Übergabe an MediaSync (Ziele, Download-Auftrag)
   services/   Katalog, Übersetzung, Statistiken, SponsorBlock/RYD
   subsonic/   Subsonic-API: Envelope, Auth, Entitäten, Medienauslieferung
   api/        JSON-API und Sitzungen für die Weboberfläche

@@ -1,6 +1,7 @@
 """JSON API consumed by the built-in web player."""
 
 from fastapi import APIRouter, Body, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import session as web_session
@@ -11,6 +12,12 @@ from app.db import repo
 from app.db.database import session_scope
 from app.services import catalog, extras, stats
 from app.services import translate as translate_service
+from app.mediasync import bridge as mediasync
+from app.mediasync import config as mediasync_config
+from app.mediasync.client import MediaSyncError
+from app.navidrome import bridge as navidrome
+from app.navidrome import config as navidrome_config
+from app.navidrome import ids as nd_ids
 from app.subsonic import media
 from app.ytm import ids
 from app.ytm import client as ytm
@@ -27,15 +34,16 @@ def _require_session(request: Request) -> str:
 
 
 def _subsonic_id(item: dict, kind: str) -> str:
+    item_id = item.get("id") or ""
     if kind == "song":
-        return ids.song_id(item["id"])
+        return ids.song_id(item_id)
     if kind == "album":
-        return ids.album_id(item["id"])
+        return ids.album_id(item_id)
     if kind == "artist":
-        return ids.artist_id(item.get("id"), item.get("name", ""))
+        return ids.artist_id(item.get("id"), item.get("name") or item.get("title") or "")
     if kind == "podcast":
-        return ids.podcast_id(item["id"])
-    return item["id"]
+        return ids.podcast_id(item_id)
+    return item_id
 
 
 def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
@@ -52,10 +60,16 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
 
     decorated = []
     for item in items:
+        if not isinstance(item, dict):
+            continue
         item_kind = kind or item.get("kind") or "song"
-        subsonic_id = _subsonic_id(item, item_kind)
+        try:
+            subsonic_id = _subsonic_id(item, item_kind)
+        except Exception as exc:
+            logger.debug("Entdecken-Eintrag übersprungen ({}): {}", item_kind, exc)
+            continue
         decorated.append({**item, "sid": subsonic_id, "starred": subsonic_id in starred, "kind": item_kind})
-    return decorated
+    return navidrome.enrich_items(decorated, kind)
 
 
 # --------------------------------------------------------------------------
@@ -200,10 +214,23 @@ async def search(request: Request, q: str = "", scope: str = "all", limit: int =
 
     if scope == "all":
         results = await catalog.search(q, song_limit=limit, album_limit=12, artist_limit=12)
+        library = await navidrome.search(q, limit=limit)
+        ytm_songs = _decorate(results["songs"], "song")
+        seen = {(song.get("navidromeId") or "").lower() for song in ytm_songs if song.get("navidromeId")}
+        extra_songs = [
+            song
+            for song in library.get("songs") or []
+            if (song.get("navidromeId") or "").lower() not in seen
+        ]
         return {
-            "songs": _decorate(results["songs"], "song"),
+            "songs": ytm_songs,
             "albums": _decorate(results["albums"], "album"),
             "artists": _decorate(results["artists"], "artist"),
+            "library": {
+                "songs": _decorate(extra_songs, "song"),
+                "albums": library.get("albums") or [],
+                "artists": library.get("artists") or [],
+            },
         }
 
     items = await catalog.search_scope(q, scope, limit)
@@ -220,6 +247,11 @@ async def suggest(request: Request, q: str = ""):
 @router.get("/album/{album_id}")
 async def album(request: Request, album_id: str):
     _require_session(request)
+    if nd_ids.is_navidrome(album_id):
+        data = await navidrome.get_album(album_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Album nicht gefunden")
+        return {**data, "sid": ids.album_id(album_id), "tracks": _decorate(data.get("tracks") or [], "song")}
     data = await catalog.get_album(album_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Album nicht gefunden")
@@ -229,6 +261,17 @@ async def album(request: Request, album_id: str):
 @router.get("/artist/{artist_id}")
 async def artist(request: Request, artist_id: str):
     _require_session(request)
+    if nd_ids.is_navidrome(artist_id):
+        data = await navidrome.get_artist(artist_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Interpret nicht gefunden")
+        return {
+            **data,
+            "sid": ids.artist_id(artist_id, data.get("name", "")),
+            "albums": _decorate(data.get("albums") or [], "album"),
+            "top_songs": _decorate(data.get("top_songs") or [], "song"),
+            "related": [],
+        }
     data = await catalog.get_artist(artist_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Interpret nicht gefunden")
@@ -253,12 +296,16 @@ async def yt_playlist(request: Request, playlist_id: str):
 @router.get("/radio/{video_id}")
 async def radio(request: Request, video_id: str, limit: int = 30):
     _require_session(request)
+    if nd_ids.is_navidrome(video_id):
+        return {"tracks": []}
     return {"tracks": _decorate(await catalog.radio(video_id, limit), "song")}
 
 
 @router.get("/lyrics/{video_id}")
 async def lyrics(request: Request, video_id: str, translate: bool = False, lang: str = ""):
     _require_session(request)
+    if nd_ids.is_navidrome(video_id):
+        return {"text": "", "synced": None, "source": "", "translation": None}
     found = await catalog.lyrics(video_id)
     if not found:
         return {"text": "", "synced": None, "source": "", "translation": None}
@@ -279,6 +326,8 @@ async def lyrics(request: Request, video_id: str, translate: bool = False, lang:
 async def votes(request: Request, video_id: str):
     """Like/dislike counts via ReturnYouTubeDislike."""
     _require_session(request)
+    if nd_ids.is_navidrome(video_id) or len(video_id) != 11:
+        return {}
     return await extras.votes(video_id) or {}
 
 
@@ -294,9 +343,16 @@ async def moods(request: Request):
 
 
 @router.get("/mood")
-async def mood(request: Request, params: str):
+async def mood(request: Request, params: str = ""):
     _require_session(request)
-    return {"playlists": _decorate(await catalog.mood_playlists(params), "playlist")}
+    if not params.strip():
+        return {"playlists": []}
+    try:
+        items = await catalog.mood_playlists(params)
+        return {"playlists": _decorate(items)}
+    except Exception as exc:
+        logger.error("Playlists für Entdecken-Kategorie fehlgeschlagen: {}", exc)
+        return {"playlists": []}
 
 
 @router.get("/podcasts")
@@ -492,6 +548,12 @@ async def create_playlist(request: Request, payload: dict = Body(...)):
         created = repo.create_playlist(session, payload.get("name", "Neue Playlist"), video_ids)
         session.flush()
         summary = repo.playlist_summary(session, created)
+    try:
+        remote = await run_in_threadpool(navidrome.sync_playlist, summary["id"])
+        if remote:
+            summary["navidrome_id"] = remote
+    except Exception as exc:
+        logger.debug("Playlist nicht nach Navidrome gespiegelt: {}", exc)
     return summary
 
 
@@ -507,15 +569,42 @@ async def add_to_playlist(request: Request, playlist_id: int, payload: dict = Bo
             repo.replace_playlist_tracks(session, playlist_id, video_ids)
         else:
             repo.append_playlist_tracks(session, playlist_id, video_ids)
+    try:
+        await run_in_threadpool(navidrome.sync_playlist, playlist_id)
+    except Exception as exc:
+        logger.debug("Playlist-Sync nach Navidrome: {}", exc)
     return {"ok": True}
 
 
 @router.delete("/playlist/{playlist_id}")
 async def remove_playlist(request: Request, playlist_id: int):
     _require_session(request)
+    remote_id = None
     with session_scope() as session:
+        found = repo.get_playlist(session, playlist_id)
+        if found is not None:
+            remote_id = found.navidrome_id
         repo.delete_playlist(session, playlist_id)
+    if remote_id:
+        await run_in_threadpool(navidrome.delete_remote_playlist, remote_id)
     return {"ok": True}
+
+
+@router.post("/playlist/{playlist_id}/navidrome")
+async def push_playlist_to_navidrome(request: Request, playlist_id: int):
+    """Import missing tracks into Navidrome, then replace the remote playlist."""
+    _require_session(request)
+    with session_scope() as session:
+        if repo.get_playlist(session, playlist_id) is None:
+            raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+        video_ids = repo.playlist_track_ids(session, playlist_id)
+    youtube_ids = [video_id for video_id in video_ids if not nd_ids.is_navidrome(video_id)]
+    jobs = await navidrome.import_tracks(youtube_ids) if youtube_ids else []
+    try:
+        remote = await run_in_threadpool(navidrome.sync_playlist, playlist_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"ok": True, "navidromeId": remote, "jobs": jobs}
 
 
 @router.post("/scrobble")
@@ -539,6 +628,8 @@ async def scrobble(request: Request, payload: dict = Body(...)):
 async def sponsorblock(request: Request, video_id: str):
     """Non-music segments (intros, outros) so the web player can skip them."""
     _require_session(request)
+    if nd_ids.is_navidrome(video_id) or len(video_id) != 11:
+        return {"segments": []}
     return {"segments": await extras.skip_segments(video_id)}
 
 
@@ -562,6 +653,8 @@ async def status(request: Request):
         "sponsorblock": settings.sponsorblock_enabled,
         "dislikes": settings.return_youtube_dislike,
         "ytmAccount": ytm.is_authenticated(),
+        "navidrome": navidrome.status(),
+        "mediasync": mediasync.status(),
     }
 
 
@@ -571,6 +664,161 @@ async def clear_cache(request: Request):
     streams.clear_disk_cache()
     ytm.clear_cache()
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------
+# Navidrome
+# --------------------------------------------------------------------------
+
+
+@router.get("/navidrome")
+async def navidrome_status(request: Request):
+    _require_session(request)
+    return navidrome.status()
+
+
+@router.put("/navidrome")
+async def save_navidrome(request: Request, payload: dict = Body(...)):
+    _require_session(request)
+    url = (payload.get("url") or "").strip().rstrip("/")
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password")
+    if password == "":
+        password = None
+    stored = navidrome_config.load()
+    secret = stored.get("password") if password is None else password
+    if url and username and secret:
+        try:
+            await run_in_threadpool(navidrome.test_connection, url, username, secret)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Verbindung fehlgeschlagen: {exc}")
+    saved = navidrome_config.save(
+        {
+            "url": url,
+            "username": username,
+            "password": secret or "",
+            "music_dir": payload.get("musicDir") or stored.get("music_dir"),
+            "import_folder": payload.get("importFolder") or stored.get("import_folder"),
+        }
+    )
+    navidrome.reload_index()
+    return navidrome.status() | {"ok": True, "url": saved.get("url")}
+
+
+@router.get("/navidrome/library")
+async def navidrome_library(request: Request):
+    _require_session(request)
+    return await navidrome.library()
+
+
+@router.get("/navidrome/playlist/{playlist_id}")
+async def navidrome_playlist(request: Request, playlist_id: str):
+    _require_session(request)
+    data = await navidrome.get_playlist(playlist_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Playlist nicht gefunden")
+    return {**data, "tracks": _decorate(data.get("tracks") or [], "song")}
+
+
+@router.get("/navidrome/cover/{cover_id}")
+async def navidrome_cover(request: Request, cover_id: str, size: int = 544):
+    _require_session(request)
+    return await media.fetch_navidrome_cover(cover_id, size)
+
+
+@router.post("/navidrome/import")
+async def navidrome_import(request: Request, payload: dict = Body(...)):
+    _require_session(request)
+    if not navidrome.configured():
+        raise HTTPException(status_code=400, detail="Navidrome ist nicht konfiguriert")
+    video_ids = payload.get("videoIds") or []
+    if payload.get("videoId"):
+        video_ids = [payload["videoId"], *video_ids]
+    video_ids = [item for item in video_ids if item]
+    if not video_ids:
+        raise HTTPException(status_code=400, detail="videoId fehlt")
+    return {"jobs": await navidrome.import_tracks(video_ids)}
+
+
+@router.get("/navidrome/job/{job_id}")
+async def navidrome_job(request: Request, job_id: str):
+    _require_session(request)
+    found = navidrome.job(job_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    return found
+
+
+# --------------------------------------------------------------------------
+# MediaSync
+# --------------------------------------------------------------------------
+
+
+@router.get("/mediasync")
+async def mediasync_status(request: Request):
+    _require_session(request)
+    return mediasync.status()
+
+
+@router.put("/mediasync")
+async def save_mediasync(request: Request, payload: dict = Body(...)):
+    _require_session(request)
+    url = (payload.get("url") or "").strip().rstrip("/")
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password")
+    if password == "":
+        password = None
+    stored = mediasync_config.load()
+    secret = stored.get("password") if password is None else password
+    if url:
+        try:
+            await run_in_threadpool(mediasync.test_connection, url, username, secret or "")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Verbindung fehlgeschlagen: {exc}")
+    mediasync_config.save({"url": url, "username": username, "password": secret or ""})
+    return mediasync.status() | {"ok": True}
+
+
+@router.get("/mediasync/targets")
+async def mediasync_targets(request: Request):
+    _require_session(request)
+    if not mediasync.configured():
+        raise HTTPException(status_code=400, detail="MediaSync ist nicht konfiguriert")
+    try:
+        items = await run_in_threadpool(mediasync.targets)
+    except MediaSyncError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+    return {"targets": items}
+
+
+@router.post("/mediasync/send")
+async def mediasync_send(request: Request, payload: dict = Body(...)):
+    _require_session(request)
+    if not mediasync.configured():
+        raise HTTPException(status_code=400, detail="MediaSync ist nicht konfiguriert")
+    video_id = payload.get("videoId") or payload.get("id")
+    if not video_id:
+        raise HTTPException(status_code=400, detail="videoId fehlt")
+    track = await catalog.get_song(video_id)
+    if track is None:
+        track = {
+            "id": video_id,
+            "title": payload.get("title") or "",
+            "artist": payload.get("artist") or "",
+            "album": payload.get("album") or "",
+        }
+    if not track.get("title") or not track.get("artist"):
+        raise HTTPException(status_code=400, detail="Titel und Interpret fehlen")
+    try:
+        result = await run_in_threadpool(
+            mediasync.send,
+            track,
+            payload.get("playlistId") or None,
+            payload.get("playlistName") or None,
+        )
+    except MediaSyncError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+    return result
 
 
 # --------------------------------------------------------------------------

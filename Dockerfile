@@ -42,7 +42,7 @@ COPY . .
 
 RUN python -m app.core.icons
 
-VOLUME ["/config", "/cache", "/logs"]
+VOLUME ["/config", "/cache", "/logs", "/music"]
 
 ENV PORT=5080
 EXPOSE 5080

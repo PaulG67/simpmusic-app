@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 
 from app.core.logging import logger
 from app.core.settings import settings
+from app.navidrome import bridge as navidrome
+from app.navidrome import ids as nd_ids
 from app.ytm import mapper, streams
 
 CHUNK_SIZE = 256 * 1024
@@ -174,8 +176,68 @@ async def _proxy(source: streams.StreamSource, range_header: str | None) -> Resp
     )
 
 
+async def stream_navidrome(request: Request, song_id: str) -> Response:
+    range_header = request.headers.get("range")
+    try:
+        url = await run_in_threadpool(navidrome.stream_url, song_id)
+    except Exception as exc:
+        logger.error("Navidrome-Stream für {} nicht auflösbar: {}", song_id, exc)
+        return Response(status_code=502, content=b"Navidrome nicht erreichbar")
+
+    headers = {"Range": range_header} if range_header else {}
+    upstream = await _http.send(_http.build_request("GET", url, headers=headers), stream=True)
+    if upstream.status_code >= 400:
+        await upstream.aclose()
+        logger.error("Navidrome lieferte {} für {}", upstream.status_code, song_id)
+        return Response(status_code=502, content=b"Navidrome-Stream fehlgeschlagen")
+
+    passthrough = {}
+    for header in ("content-length", "content-range", "content-type", "accept-ranges"):
+        if header in upstream.headers:
+            passthrough[header.title()] = upstream.headers[header]
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_bytes(CHUNK_SIZE):
+                yield chunk
+        finally:
+            await upstream.aclose()
+
+    return StreamingResponse(
+        body(),
+        status_code=upstream.status_code,
+        media_type=passthrough.get("Content-Type", "audio/mpeg"),
+        headers={
+            **{k: v for k, v in passthrough.items() if k != "Content-Type"},
+            "Accept-Ranges": passthrough.get("Accept-Ranges", "bytes"),
+            "Cache-Control": "private, max-age=86400",
+        },
+    )
+
+
+async def fetch_navidrome_cover(cover_id: str, size: int = 544) -> Response:
+    try:
+        url = await run_in_threadpool(navidrome.cover_url, cover_id, size)
+        response = await _http.get(url)
+        response.raise_for_status()
+    except Exception as exc:
+        logger.debug("Navidrome-Cover {} nicht abrufbar: {}", cover_id, exc)
+        return Response(status_code=404, content=b"Kein Cover")
+    return Response(
+        response.content,
+        media_type=response.headers.get("content-type", "image/jpeg"),
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
+
+
 async def stream_track(request: Request, video_id: str) -> Response:
     range_header = request.headers.get("range")
+
+    navidrome_song = nd_ids.unwrap(video_id)
+    if not navidrome_song:
+        navidrome_song = await run_in_threadpool(navidrome.resolve_video, video_id)
+    if navidrome_song:
+        return await stream_navidrome(request, navidrome_song)
 
     entry = await run_in_threadpool(streams.cached_entry, video_id)
     if entry:

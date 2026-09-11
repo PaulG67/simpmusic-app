@@ -17,6 +17,7 @@ from app.db.models import (
     Album,
     Artist,
     LyricsTranslation,
+    NavidromeLink,
     PlayEvent,
     Playlist,
     PlaylistEntry,
@@ -363,6 +364,7 @@ def playlist_summary(session: Session, playlist: Playlist) -> dict:
         "updated_at": playlist.updated_at,
         "thumbnail": cover,
         "ytm_id": playlist.ytm_id,
+        "navidrome_id": playlist.navidrome_id,
     }
 
 
@@ -607,6 +609,82 @@ def subscribed_podcasts(session: Session) -> list[dict]:
         if found:
             result.append({**found, "starred_at": created})
     return result
+
+
+# --------------------------------------------------------------------------
+# Navidrome links
+# --------------------------------------------------------------------------
+
+
+def get_navidrome_link(session: Session, video_id: str) -> dict | None:
+    row = session.get(NavidromeLink, video_id)
+    if row is None:
+        return None
+    return {
+        "video_id": row.video_id,
+        "navidrome_id": row.navidrome_id,
+        "title": row.title,
+        "artist": row.artist,
+        "path": row.path,
+    }
+
+
+def get_navidrome_links(session: Session, video_ids: list[str]) -> dict[str, dict]:
+    if not video_ids:
+        return {}
+    rows = session.scalars(select(NavidromeLink).where(NavidromeLink.video_id.in_(video_ids))).all()
+    return {
+        row.video_id: {
+            "video_id": row.video_id,
+            "navidrome_id": row.navidrome_id,
+            "title": row.title,
+            "artist": row.artist,
+            "path": row.path,
+        }
+        for row in rows
+    }
+
+
+def navidrome_link_by_song(session: Session, navidrome_id: str) -> dict | None:
+    row = session.scalar(select(NavidromeLink).where(NavidromeLink.navidrome_id == navidrome_id))
+    if row is None:
+        return None
+    return {
+        "video_id": row.video_id,
+        "navidrome_id": row.navidrome_id,
+        "title": row.title,
+        "artist": row.artist,
+        "path": row.path,
+    }
+
+
+def upsert_navidrome_link(
+    session: Session,
+    video_id: str,
+    navidrome_id: str,
+    title: str = "",
+    artist: str = "",
+    path: str = "",
+) -> None:
+    if not video_id or not navidrome_id:
+        return
+    row = session.get(NavidromeLink, video_id)
+    if row is None:
+        row = NavidromeLink(video_id=video_id)
+        session.add(row)
+    row.navidrome_id = navidrome_id
+    if title:
+        row.title = title
+    if artist:
+        row.artist = artist
+    if path:
+        row.path = path
+
+
+def set_playlist_navidrome_id(session: Session, playlist_id: int, navidrome_id: str | None) -> None:
+    playlist = session.get(Playlist, playlist_id)
+    if playlist is not None:
+        playlist.navidrome_id = navidrome_id or None
 
 
 # --------------------------------------------------------------------------

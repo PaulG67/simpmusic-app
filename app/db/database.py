@@ -35,7 +35,10 @@ def _add_missing_columns() -> None:
     """
     from sqlalchemy import inspect, text
 
-    expected = {("play_events", "seconds"): "INTEGER DEFAULT 0"}
+    expected = {
+        ("play_events", "seconds"): "INTEGER DEFAULT 0",
+        ("playlists", "navidrome_id"): "VARCHAR(64)",
+    }
     inspector = inspect(engine)
 
     with engine.begin() as connection:

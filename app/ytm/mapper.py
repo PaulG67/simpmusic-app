@@ -12,6 +12,22 @@ _SIZE_RE = re.compile(r"=w\d+-h\d+")
 _DURATION_RE = re.compile(r"^\d+(:\d{1,2})+$")
 
 
+def _text(value: Any, fallback: str = "") -> str:
+    """Coerce ytmusicapi leftovers (None, runs, dicts) into a display string."""
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        return value.strip() or fallback
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        parts = [_text(part) for part in value]
+        return " ".join(part for part in parts if part) or fallback
+    if isinstance(value, dict):
+        return _text(value.get("name") or value.get("title") or value.get("text"), fallback)
+    return str(value).strip() or fallback
+
+
 def upscale_thumbnail(url: str | None, size: int = 544) -> str | None:
     if not url:
         return None
@@ -154,7 +170,7 @@ def normalize_album(raw: dict) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    browse_id = raw.get("browseId") or raw.get("audioPlaylistId") or raw.get("id")
+    browse_id = _text(raw.get("browseId") or raw.get("audioPlaylistId") or raw.get("id"))
     if not browse_id:
         return None
 
@@ -163,7 +179,7 @@ def normalize_album(raw: dict) -> dict | None:
 
     return {
         "id": browse_id,
-        "name": (raw.get("title") or raw.get("name") or "Unbekanntes Album").strip(),
+        "name": _text(raw.get("title") or raw.get("name"), "Unbekanntes Album"),
         "artist": artist,
         "artist_id": artist_id,
         "thumbnail": pick_thumbnail(raw.get("thumbnails") or raw.get("thumbnail")),
@@ -180,8 +196,8 @@ def normalize_artist(raw: dict) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    channel_id = raw.get("channelId") or raw.get("browseId") or raw.get("id")
-    name = (raw.get("artist") or raw.get("name") or raw.get("title") or "").strip()
+    channel_id = _text(raw.get("channelId") or raw.get("browseId") or raw.get("id")) or None
+    name = _text(raw.get("artist") or raw.get("name") or raw.get("title"))
     if not channel_id and not name:
         return None
 
@@ -267,21 +283,28 @@ def normalize_playlist(raw: dict) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    playlist_id = raw.get("playlistId") or raw.get("browseId") or raw.get("id")
+    playlist_id = _text(raw.get("playlistId") or raw.get("browseId") or raw.get("id"))
+    if playlist_id.startswith("VL"):
+        playlist_id = playlist_id[2:]
     if not playlist_id:
         return None
 
     author = raw.get("author")
     if isinstance(author, list):
-        owner = ", ".join(entry.get("name", "") for entry in author if isinstance(entry, dict)).strip(", ")
+        owner = ", ".join(
+            filter(
+                None,
+                (_text(entry.get("name") if isinstance(entry, dict) else entry) for entry in author),
+            )
+        )
     elif isinstance(author, dict):
-        owner = author.get("name", "")
+        owner = _text(author.get("name"))
     else:
-        owner = str(author or "YouTube Music")
+        owner = _text(author, "YouTube Music")
 
     return {
         "id": playlist_id,
-        "name": (raw.get("title") or raw.get("name") or "Playlist").strip(),
+        "name": _text(raw.get("title") or raw.get("name"), "Playlist"),
         "owner": owner or "YouTube Music",
         "description": raw.get("description") or "",
         "thumbnail": pick_thumbnail(raw.get("thumbnails") or raw.get("thumbnail")),

@@ -38,6 +38,9 @@
       filters: null,
       sponsorblock: true,
       skipSilence: false,
+      volume: 1,
+      muted: false,
+      rate: 1,
     },
 
     segments: [],
@@ -73,6 +76,7 @@
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") this.flushScrobble(true);
       });
+      this.applyOutput();
     },
 
     el(offset = 0) {
@@ -129,6 +133,7 @@
       });
 
       this.applyEqualizer();
+      this.applyOutput();
       return this.audioCtx;
     },
 
@@ -183,7 +188,46 @@
         this.resumeGraph();
       }
       this.applyEqualizer();
+      this.applyOutput();
       this.emit("settings", this.settings);
+    },
+
+    applyOutput() {
+      const volume = this.settings.muted ? 0 : Math.min(1, Math.max(0, this.settings.volume ?? 1));
+      const rate = this.settings.rate || 1;
+      this.elements.forEach((element) => {
+        element.volume = volume;
+        element.playbackRate = rate;
+      });
+      if (this.preampNode) {
+        const dbToGain = (db) => Math.pow(10, db / 20);
+        const eqPre = this.settings.eqEnabled ? dbToGain(this.settings.preamp || 0) : 1;
+        this.preampNode.gain.value = eqPre * volume;
+      }
+    },
+
+    setVolume(value) {
+      this.settings.volume = Math.min(1, Math.max(0, Number(value)));
+      if (this.settings.volume > 0) this.settings.muted = false;
+      this.applyOutput();
+      this.emit("volume", this.settings);
+    },
+
+    toggleMute() {
+      this.settings.muted = !this.settings.muted;
+      this.applyOutput();
+      this.emit("volume", this.settings);
+    },
+
+    skipBy(seconds) {
+      const next = this.el().currentTime + seconds;
+      this.seek(Math.min(this.duration(), Math.max(0, next)));
+    },
+
+    setRate(rate) {
+      this.settings.rate = rate;
+      this.applyOutput();
+      this.emit("rate", rate);
     },
 
     setGain(elementIndex, value, seconds) {
@@ -243,6 +287,7 @@
       });
 
       this.load(element, track);
+      this.applyOutput();
       element.play().catch((error) => this.emit("error", error.message));
 
       this.emit("track", track);
@@ -483,11 +528,13 @@
       if (!("mediaSession" in navigator) || !track) return;
 
       const artwork = track.thumbnail
-        ? [96, 192, 512].map((size) => ({
-            src: `/api/cover?u=${encodeURIComponent(track.thumbnail)}&size=${size}`,
-            sizes: `${size}x${size}`,
-            type: "image/jpeg",
-          }))
+        ? [96, 192, 512].map((size) => {
+            const thumb = track.thumbnail;
+            const src = thumb.startsWith("/")
+              ? `${thumb}${thumb.includes("?") ? "&" : "?"}size=${size}`
+              : `/api/cover?u=${encodeURIComponent(thumb)}&size=${size}`;
+            return { src, sizes: `${size}x${size}`, type: "image/jpeg" };
+          })
         : [];
 
       navigator.mediaSession.metadata = new MediaMetadata({

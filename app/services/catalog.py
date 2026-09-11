@@ -83,10 +83,26 @@ async def get_artist(channel_id: str) -> dict | None:
 
 async def get_song(video_id: str) -> dict | None:
     """Local snapshot wins; YouTube is only consulted for unknown ids."""
+    from app.navidrome import ids as nd_ids
+    from app.navidrome.client import NavidromeClient, NavidromeError
+
     with session_scope() as session:
         cached = repo.get_track(session, video_id)
     if cached and cached.get("title"):
         return cached
+
+    if nd_ids.is_navidrome(video_id):
+        def load() -> dict | None:
+            with NavidromeClient() as client:
+                return client.get_song(nd_ids.unwrap(video_id) or "")
+
+        try:
+            track = await run_in_threadpool(load)
+        except NavidromeError:
+            track = None
+        if track:
+            await run_in_threadpool(_persist_songs, [track])
+        return track or cached
 
     track = await run_in_threadpool(ytm.song, video_id)
     if track:

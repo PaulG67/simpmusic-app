@@ -104,6 +104,7 @@ class Playlist(Base):
     comment: Mapped[str] = mapped_column(Text, default="")
     public: Mapped[bool] = mapped_column(Boolean, default=False)
     ytm_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    navidrome_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -181,6 +182,22 @@ class StreamCacheEntry(Base):
     bitrate: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_access: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class NavidromeLink(Base):
+    """Maps a YouTube Music video id to a Navidrome song id.
+
+    Filled when search matching succeeds or after an import into the music folder.
+    """
+
+    __tablename__ = "navidrome_links"
+
+    video_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    navidrome_id: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(512), default="")
+    artist: Mapped[str] = mapped_column(String(512), default="")
+    path: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class PlayQueue(Base):

@@ -9,6 +9,8 @@ services:
       - ./config:/config
       - ./cache:/cache
       - ./logs:/logs
+      # Denselben Musik-Share wie Navidrome einhängen, sonst bleiben Downloads nur im Cache.
+      - /mnt/user/music:/music
     environment:
       PORT: "5080"
       SUBSONIC_USER: musicplay
@@ -23,6 +25,14 @@ services:
       TRANSLATE_API_KEY: ""
       TRANSLATE_MODEL: gpt-4o-mini
       TRANSLATE_TARGET: ""
+      NAVIDROME_URL: "http://192.168.0.188:4533"
+      NAVIDROME_USER: ""
+      NAVIDROME_PASSWORD: ""
+      NAVIDROME_MUSIC_DIR: "/music"
+      NAVIDROME_IMPORT_FOLDER: "YouTube"
+      MEDIASYNC_URL: ""
+      MEDIASYNC_USER: ""
+      MEDIASYNC_PASSWORD: ""
     # yt-dlp spawns Deno to solve YouTube's JS challenges; it gets OOM-killed
     # below roughly 512 MB, which shows up as "Signature solving failed".
     mem_limit: 2g

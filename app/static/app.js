@@ -17,6 +17,8 @@
     translation: null,
     lyricsTranslated: false,
     status: null,
+    navidrome: null,
+    mediasync: null,
     online: navigator.onLine,
   };
 
@@ -95,8 +97,24 @@
     return node;
   }
 
+  function navidromeReady() {
+    return Boolean(state.navidrome && state.navidrome.configured);
+  }
+
+  function mediasyncReady() {
+    return Boolean(state.mediasync && state.mediasync.configured);
+  }
+
+  function isLocalTrack(track) {
+    return Boolean(track && (track.inLibrary || track.navidromeId || String(track.id || "").startsWith("nd:")));
+  }
+
   function coverUrl(url, size = 320) {
     if (!url) return PLACEHOLDER;
+    if (url.startsWith("/")) {
+      const join = url.includes("?") ? "&" : "?";
+      return `${url}${join}size=${size}`;
+    }
     return `/api/cover?u=${encodeURIComponent(url)}&size=${size}`;
   }
 
@@ -171,6 +189,7 @@
     album: (route) => renderAlbum(route.id),
     artist: (route) => renderArtist(route.id),
     playlist: (route) => renderPlaylist(route.id),
+    nplaylist: (route) => renderNavidromePlaylist(route.id),
     ytplaylist: (route) => renderYtPlaylist(route.id, route.title),
     mood: (route) => renderMood(route.params, route.title),
     podcast: (route) => renderPodcast(route.id),
@@ -206,7 +225,8 @@
       ]),
     ]);
 
-    if (Offline.has(track.id)) row.append(element("span", { class: "pill", text: "Offline" }));
+    if (isLocalTrack(track)) row.append(element("span", { class: "pill", text: "Navidrome" }));
+    else if (Offline.has(track.id)) row.append(element("span", { class: "pill", text: "Offline" }));
     if (track.duration) row.append(element("span", { class: "track-time", text: formatTime(track.duration) }));
 
     const more = element("span", { class: "track-more", text: "⋯" });
@@ -230,7 +250,13 @@
       song: () => Player.play([item], 0),
       album: () => navigate({ name: "album", id: item.id }),
       artist: () => navigate({ name: "artist", id: item.id }),
-      playlist: () => navigate({ name: "ytplaylist", id: item.id, title: item.name }),
+      playlist: () => {
+        if (item.source === "navidrome" || String(item.id || "").startsWith("nd:")) {
+          navigate({ name: "nplaylist", id: String(item.id).replace(/^nd:/, "") });
+        } else {
+          navigate({ name: "ytplaylist", id: item.id, title: item.name });
+        }
+      },
       podcast: () => navigate({ name: "podcast", id: item.id }),
     };
     return element(
@@ -280,7 +306,7 @@
         }),
         element("button", {
           class: "chip",
-          text: "↓ Alle offline",
+          text: navidromeReady() ? "↓ Nach Navidrome" : "↓ Alle offline",
           onclick: (event) => downloadAll(tracks, event.currentTarget),
         }),
         ...extras,
@@ -333,7 +359,10 @@
       ]);
 
       const fragment = document.createDocumentFragment();
+      const library = music.library || {};
       const blocks = [
+        ["In Navidrome", library.songs, "list"],
+        ["Alben in Navidrome", library.albums, "row"],
         ["Interpreten", music.artists, "row"],
         ["Alben", music.albums, "row"],
         ["Titel", music.songs, "list"],
@@ -417,10 +446,11 @@
   async function renderMood(params, title) {
     setTitle(title || "Kategorie");
     loading();
-    const data = await api(`/api/mood?params=${encodeURIComponent(params)}`);
+    const data = await api(`/api/mood?params=${encodeURIComponent(params || "")}`);
+    const items = data.playlists || [];
     $("view").replaceChildren(
-      data.playlists.length
-        ? element("div", { class: "grid" }, data.playlists.map(itemCard))
+      items.length
+        ? element("div", { class: "grid" }, items.map(itemCard))
         : element("div", { class: "empty", text: "Keine Playlists in dieser Kategorie." })
     );
   }
@@ -511,14 +541,50 @@
       },
     });
 
+    const extras = [remove];
+    if (navidromeReady()) {
+      extras.unshift(
+        element("button", {
+          class: "chip",
+          text: "Nach Navidrome",
+          onclick: async (event) => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            button.textContent = "Speichert …";
+            try {
+              const result = await api(`/api/playlist/${playlistId}/navidrome`, { method: "POST" });
+              if (result.jobs && result.jobs.length) await waitForJobs(result.jobs, button);
+              toast("In Navidrome gespeichert");
+              render(state.route, true);
+            } catch (error) {
+              toast(error.message);
+              button.disabled = false;
+              button.textContent = "Nach Navidrome";
+            }
+          },
+        })
+      );
+    }
+
     $("view").replaceChildren(
       playAllHeader(
         playlist.name,
         `${tracks.length} Titel · ${formatDuration(playlist.duration)}`,
         playlist.thumbnail,
         tracks,
-        [remove]
+        extras
       ),
+      trackList(tracks)
+    );
+  }
+
+  async function renderNavidromePlaylist(playlistId) {
+    loading();
+    const playlist = await api(`/api/navidrome/playlist/${encodeURIComponent(playlistId)}`);
+    setTitle(playlist.name);
+    const tracks = playlist.tracks || [];
+    $("view").replaceChildren(
+      playAllHeader(playlist.name, `${tracks.length} Titel`, playlist.thumbnail, tracks),
       trackList(tracks)
     );
   }
@@ -579,7 +645,11 @@
     setTitle("Bibliothek");
     loading();
 
-    const [favorites, playlists] = await Promise.all([api("/api/favorites"), api("/api/playlists")]);
+    const [favorites, playlists, navidromeLibrary] = await Promise.all([
+      api("/api/favorites"),
+      api("/api/playlists"),
+      api("/api/navidrome/library").catch(() => ({ configured: false })),
+    ]);
     state.playlists = playlists.playlists;
 
     const fragment = document.createDocumentFragment();
@@ -604,6 +674,38 @@
         }),
       ])
     );
+
+    if (navidromeLibrary.configured && (navidromeLibrary.playlists || []).length) {
+      fragment.append(
+        element("div", { class: "section" }, [
+          element("h2", { text: "Navidrome-Playlists" }),
+          ...navidromeLibrary.playlists.map((playlist) =>
+            element(
+              "button",
+              {
+                class: "list-card",
+                onclick: () => navigate({ name: "nplaylist", id: String(playlist.id).replace(/^nd:/, "") }),
+              },
+              [
+                cover(playlist.thumbnail, 46),
+                element("div", {}, [
+                  element("strong", { text: playlist.name }),
+                  element("span", { text: `${playlist.song_count || 0} Titel` }),
+                ]),
+              ]
+            )
+          ),
+        ])
+      );
+    }
+    if (navidromeLibrary.configured && (navidromeLibrary.albums || []).length) {
+      fragment.append(
+        element("div", { class: "section" }, [
+          element("h2", { text: "Zuletzt in Navidrome" }),
+          element("div", { class: "row" }, navidromeLibrary.albums.map(itemCard)),
+        ])
+      );
+    }
 
     const playlistCards = playlists.playlists.map((playlist) =>
       element("button", { class: "list-card", onclick: () => navigate({ name: "playlist", id: playlist.id }) }, [
@@ -839,6 +941,140 @@
     );
   }
 
+  function navidromeSettings(status) {
+    const nd = status.navidrome || {};
+    state.navidrome = nd;
+    return element("div", { class: "section" }, [
+      element("h2", { text: "Navidrome" }),
+      element("p", {
+        class: "muted",
+        text: nd.configured
+          ? nd.reachable
+            ? "Suche und Vorschläge kommen von YouTube Music. Abspielen, Playlists und Downloads laufen über Navidrome."
+            : "Gespeichert, aber Navidrome antwortet nicht. URL und Zugangsdaten prüfen."
+          : "URL, Benutzer und Passwort deines Navidrome eintragen. Musikordner denselben Share wie Navidrome nach /music einhängen.",
+      }),
+      element("div", { class: "settings-form" }, [
+        element("input", {
+          type: "url",
+          id: "nd-url",
+          value: nd.url || "",
+          placeholder: "http://192.168.0.188:4533",
+          autocomplete: "off",
+        }),
+        element("input", {
+          type: "text",
+          id: "nd-user",
+          value: nd.username || "",
+          placeholder: "Navidrome-Benutzer",
+          autocomplete: "username",
+        }),
+        element("input", {
+          type: "password",
+          id: "nd-pass",
+          placeholder: nd.passwordSet ? "Passwort unverändert lassen" : "Navidrome-Passwort",
+          autocomplete: "new-password",
+        }),
+        element("input", {
+          type: "text",
+          id: "nd-folder",
+          value: nd.importFolder || "YouTube",
+          placeholder: "Unterordner für Imports",
+        }),
+        nd.configured
+          ? element("p", {
+              class: "muted",
+              text: nd.musicDirWritable
+                ? `Imports nach ${nd.musicDir}/${nd.importFolder || "YouTube"}`
+                : `Musikordner nicht beschreibbar (${nd.musicDir}). In Unraid denselben Pfad wie Navidrome als /music einhängen.`,
+            })
+          : null,
+        element("button", {
+          class: "chip solid",
+          text: "Verbinden",
+          onclick: async () => {
+            try {
+              const data = await api("/api/navidrome", {
+                method: "PUT",
+                body: {
+                  url: $("nd-url").value.trim(),
+                  username: $("nd-user").value.trim(),
+                  password: $("nd-pass").value,
+                  importFolder: $("nd-folder").value.trim() || "YouTube",
+                  musicDir: nd.musicDir,
+                },
+              });
+              state.navidrome = data;
+              toast(data.reachable ? "Navidrome verbunden" : "Gespeichert");
+              render(state.route, true);
+            } catch (error) {
+              toast(error.message);
+            }
+          },
+        }),
+      ]),
+    ]);
+  }
+
+  function mediasyncSettings(status) {
+    const ms = status.mediasync || {};
+    state.mediasync = ms;
+    return element("div", { class: "section" }, [
+      element("h2", { text: "MediaSync" }),
+      element("p", {
+        class: "muted",
+        text: ms.configured
+          ? ms.reachable
+            ? "Titel können von hier an MediaSync zum Download übergeben werden. Dort wählst du Playlist oder Bibliothek."
+            : "Gespeichert, aber MediaSync antwortet nicht. URL prüfen – im LAN z.B. http://192.168.0.188:PORT."
+          : "URL deiner MediaSync-App auf Unraid. Optional Benutzer/Passwort, falls MediaSync Anmeldung verlangt.",
+      }),
+      element("div", { class: "settings-form" }, [
+        element("input", {
+          type: "url",
+          id: "ms-url",
+          value: ms.url || "",
+          placeholder: "http://192.168.0.188:8090",
+          autocomplete: "off",
+        }),
+        element("input", {
+          type: "text",
+          id: "ms-user",
+          value: ms.username || "",
+          placeholder: "Benutzer (optional)",
+          autocomplete: "username",
+        }),
+        element("input", {
+          type: "password",
+          id: "ms-pass",
+          placeholder: ms.passwordSet ? "Passwort unverändert lassen" : "Passwort (optional)",
+          autocomplete: "new-password",
+        }),
+        element("button", {
+          class: "chip solid",
+          text: "Verbinden",
+          onclick: async () => {
+            try {
+              const data = await api("/api/mediasync", {
+                method: "PUT",
+                body: {
+                  url: $("ms-url").value.trim(),
+                  username: $("ms-user").value.trim(),
+                  password: $("ms-pass").value,
+                },
+              });
+              state.mediasync = data;
+              toast(data.reachable ? "MediaSync verbunden" : "Gespeichert");
+              render(state.route, true);
+            } catch (error) {
+              toast(error.message);
+            }
+          },
+        }),
+      ]),
+    ]);
+  }
+
   async function renderSettings() {
     setTitle("Mehr");
     loading();
@@ -927,6 +1163,10 @@
         ]),
       ]),
 
+      navidromeSettings(status),
+
+      mediasyncSettings(status),
+
       element("div", { class: "section" }, [
         element("h2", { text: "Wiedergabe" }),
         element("div", { class: "chips" }, [
@@ -974,6 +1214,22 @@
           element("dd", { text: status.sponsorblock ? "aktiv" : "aus" }),
           element("dt", { text: "YouTube-Music-Konto" }),
           element("dd", { text: status.ytmAccount ? "verbunden" : "nicht verbunden" }),
+          element("dt", { text: "Navidrome" }),
+          element("dd", {
+            text: status.navidrome && status.navidrome.configured
+              ? status.navidrome.reachable
+                ? `verbunden${status.navidrome.version ? " · " + status.navidrome.version : ""}`
+                : "konfiguriert, nicht erreichbar"
+              : "nicht konfiguriert",
+          }),
+          element("dt", { text: "MediaSync" }),
+          element("dd", {
+            text: status.mediasync && status.mediasync.configured
+              ? status.mediasync.reachable
+                ? `verbunden${status.mediasync.version ? " · " + status.mediasync.version : ""}`
+                : "konfiguriert, nicht erreichbar"
+              : "nicht konfiguriert",
+          }),
         ]),
         element("button", {
           class: "chip",
@@ -1001,7 +1257,59 @@
 
   // -------------------------------------------------------- track actions
 
+  async function waitForJobs(jobs, button) {
+    const pending = (jobs || []).filter((job) => job.status === "queued" || job.status === "running");
+    let remaining = pending.slice();
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (remaining.length) {
+      if (Date.now() > deadline) throw new Error("Navidrome-Import dauert zu lange");
+      if (button) button.textContent = `↓ ${jobs.length - remaining.length}/${jobs.length}`;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const updates = await Promise.all(remaining.map((job) => api(`/api/navidrome/job/${job.id}`).catch(() => job)));
+      remaining = updates.filter((job) => job.status === "queued" || job.status === "running");
+      const failed = updates.find((job) => job.status === "error");
+      if (failed) throw new Error(failed.error || "Import fehlgeschlagen");
+    }
+    return jobs;
+  }
+
+  async function importToNavidrome(tracks, button) {
+    const pending = tracks.filter((track) => track.id && !isLocalTrack(track) && !String(track.id).startsWith("nd:"));
+    if (!pending.length) {
+      toast("Bereits in Navidrome");
+      return;
+    }
+    if (button) button.disabled = true;
+    const result = await api("/api/navidrome/import", {
+      method: "POST",
+      body: { videoIds: pending.map((track) => track.id) },
+    });
+    await waitForJobs(result.jobs, button);
+    pending.forEach((track) => {
+      track.inLibrary = true;
+      track.source = "both";
+    });
+    if (button) {
+      button.disabled = false;
+      button.textContent = navidromeReady() ? "↓ Nach Navidrome" : "↓ Alle offline";
+    }
+    toast(pending.length === 1 ? "In Navidrome gespeichert" : `${pending.length} Titel in Navidrome`);
+    refreshOfflineBadges();
+  }
+
   async function downloadAll(tracks, button) {
+    if (navidromeReady()) {
+      try {
+        await importToNavidrome(tracks, button);
+      } catch (error) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "↓ Nach Navidrome";
+        }
+        toast(error.message);
+      }
+      return;
+    }
     const pending = tracks.filter((track) => !Offline.has(track.id));
     if (!pending.length) {
       toast("Bereits alle offline verfügbar");
@@ -1024,15 +1332,19 @@
 
   function refreshOfflineBadges() {
     document.querySelectorAll("#view .track").forEach((row) => {
-      const cached = Offline.has(row.dataset.videoId);
-      const badge = row.querySelector(".pill");
-      if (cached && !badge) row.insertBefore(element("span", { class: "pill", text: "Offline" }), row.lastChild);
-      if (!cached && badge) badge.remove();
+      const videoId = row.dataset.videoId;
+      const already = row.querySelector(".pill");
+      const local = already && already.textContent === "Navidrome";
+      const cached = Offline.has(videoId);
+      if (local) return;
+      if (cached && !already) row.insertBefore(element("span", { class: "pill", text: "Offline" }), row.lastChild);
+      if (!cached && already && already.textContent === "Offline") already.remove();
     });
   }
 
   function openTrackSheet(track) {
     const cached = Offline.has(track.id);
+    const local = isLocalTrack(track);
     const actions = [
       element("button", {
         class: "action",
@@ -1052,9 +1364,46 @@
           closeSheet();
         },
       }),
+    ];
+
+    if (navidromeReady() && !String(track.id || "").startsWith("nd:")) {
+      actions.push(
+        element("button", {
+          class: "action",
+          text: local ? "Bereits in Navidrome" : "Nach Navidrome laden",
+          onclick: async (event) => {
+            if (local) {
+              closeSheet();
+              return;
+            }
+            const button = event.currentTarget;
+            button.textContent = "Wird geladen …";
+            try {
+              await importToNavidrome([track], button);
+              closeSheet();
+            } catch (error) {
+              toast(error.message);
+            }
+          },
+        })
+      );
+    }
+
+    actions.push(
       element("button", {
         class: "action",
-        text: cached ? "Offline-Kopie löschen" : "Offline speichern",
+        text: "An MediaSync senden",
+        onclick: () => {
+          closeSheet();
+          openMediaSyncSheet(track);
+        },
+      })
+    );
+
+    actions.push(
+      element("button", {
+        class: "action",
+        text: cached ? "Offline-Kopie löschen" : "Aufs Gerät speichern",
         onclick: async (event) => {
           const button = event.currentTarget;
           if (cached) {
@@ -1073,16 +1422,21 @@
           closeSheet();
           refreshOfflineBadges();
         },
-      }),
-      element("button", {
-        class: "action",
-        text: "Radio starten",
-        onclick: () => {
-          closeSheet();
-          startRadio(track);
-        },
-      }),
-    ];
+      })
+    );
+
+    if (!String(track.id || "").startsWith("nd:")) {
+      actions.push(
+        element("button", {
+          class: "action",
+          text: "Radio starten",
+          onclick: () => {
+            closeSheet();
+            startRadio(track);
+          },
+        })
+      );
+    }
 
     if (track.album_id) {
       actions.push(
@@ -1158,6 +1512,16 @@
 
   async function saveSettings(section, value) {
     await api(`/api/settings/${section}`, { method: "PUT", body: value });
+  }
+
+  function persistPlayer() {
+    saveSettings("player", {
+      crossfade: Player.settings.crossfade,
+      sponsorblock: Player.settings.sponsorblock,
+      volume: Player.settings.volume,
+      muted: Player.settings.muted,
+      rate: Player.settings.rate,
+    });
   }
 
   function openEqualizerSheet() {
@@ -1276,10 +1640,7 @@
       },
       onchange: (event) => {
         Player.updateSettings({ crossfade: parseInt(event.target.value, 10) });
-        saveSettings("player", {
-          crossfade: Player.settings.crossfade,
-          sponsorblock: Player.settings.sponsorblock,
-        });
+        persistPlayer();
       },
     });
     nodes.push(
@@ -1297,10 +1658,7 @@
           checked: settings.sponsorblock ? "checked" : null,
           onchange: (event) => {
             Player.updateSettings({ sponsorblock: event.target.checked });
-            saveSettings("player", {
-              crossfade: Player.settings.crossfade,
-              sponsorblock: Player.settings.sponsorblock,
-            });
+            persistPlayer();
           },
         }),
         element("span", { text: "SponsorBlock: Nicht-Musik überspringen" }),
@@ -1362,6 +1720,8 @@
   // ---------------------------------------------------------- player wiring
 
   Player.init([$("audio-a"), $("audio-b")]);
+  syncVolumeUi();
+  syncRateButton();
 
   Player.on("track", async (track) => {
     $("mini-player").hidden = false;
@@ -1374,7 +1734,8 @@
     $("np-artist").textContent = track.artist;
     $("np-duration").textContent = formatTime(track.duration);
     setFavoriteButton(track);
-    setDownloadButton(track);
+    setLibraryButtons(track);
+    syncRateButton();
     renderQueue();
     highlightPlaying(track);
 
@@ -1430,10 +1791,151 @@
     $("np-star").classList.toggle("active", !!track.starred);
   }
 
-  function setDownloadButton(track) {
+  function setLibraryButtons(track) {
+    const local = isLocalTrack(track);
     const cached = Offline.has(track.id);
-    $("np-download").textContent = cached ? "✓ Offline" : "↓ Offline";
-    $("np-download").classList.toggle("active", cached);
+    $("np-navidrome").textContent = local ? "✓ In Navidrome" : "↓ In Navidrome";
+    $("np-navidrome").classList.toggle("active", local);
+    $("np-offline").textContent = cached ? "✓ Offline" : "↓ Offline";
+    $("np-offline").classList.toggle("active", cached);
+  }
+
+  function formatRate(rate) {
+    return rate === 1 ? "1×" : `${rate}×`;
+  }
+
+  function syncRateButton() {
+    $("np-rate").textContent = formatRate(Player.settings.rate || 1);
+    $("np-rate").classList.toggle("active", (Player.settings.rate || 1) !== 1);
+  }
+
+  function syncVolumeUi() {
+    const stored = Math.round((Player.settings.volume ?? 1) * 100);
+    $("np-volume").value = String(stored);
+    $("np-volume-label").textContent = Player.settings.muted ? "Stumm" : `${stored}%`;
+    $("np-mute").textContent = Player.settings.muted || stored === 0 ? "🔇" : "🔊";
+    $("np-mute").classList.toggle("active", !!Player.settings.muted);
+  }
+
+  async function openAddToPlaylistSheet(track) {
+    if (!state.playlists.length) {
+      const data = await api("/api/playlists").catch(() => ({ playlists: [] }));
+      state.playlists = data.playlists || [];
+    }
+    const actions = [
+      element("button", {
+        class: "action",
+        text: "+ Neue Playlist",
+        onclick: async () => {
+          const name = prompt("Name der Playlist");
+          if (!name) return;
+          await api("/api/playlists", { method: "POST", body: { name, tracks: [track.sid] } });
+          const data = await api("/api/playlists").catch(() => ({ playlists: [] }));
+          state.playlists = data.playlists || [];
+          closeSheet();
+          toast(`In „${name}“ gespeichert`);
+        },
+      }),
+      ...state.playlists.map((playlist) =>
+        element("button", {
+          class: "action",
+          text: playlist.name,
+          onclick: async () => {
+            await api(`/api/playlist/${playlist.id}/tracks`, { method: "POST", body: { tracks: [track.sid] } });
+            closeSheet();
+            toast(`Zu „${playlist.name}“ hinzugefügt`);
+          },
+        })
+      ),
+    ];
+    if (actions.length === 1) {
+      actions.push(element("p", { class: "muted", text: "Noch keine Playlists – oben eine anlegen." }));
+    }
+    openSheet("Zur Playlist hinzufügen", actions);
+  }
+
+  const MEDIASYNC_TARGET_KEY = "mp.mediasync.target";
+
+  async function sendToMediaSync(track, playlistId, playlistName) {
+    const result = await api("/api/mediasync/send", {
+      method: "POST",
+      body: {
+        videoId: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album || "",
+        playlistId: playlistId || "",
+        playlistName: playlistName || "",
+      },
+    });
+    try {
+      localStorage.setItem(MEDIASYNC_TARGET_KEY, JSON.stringify({ playlistId: playlistId || "", playlistName: playlistName || "" }));
+    } catch (error) {
+      /* ignore */
+    }
+    const job = result.job || result;
+    const dest = playlistName || (playlistId && playlistId !== "library" ? "Playlist" : "Bibliothek");
+    toast(job.status === "queued" || job.status === "running" || result.ok ? `An MediaSync übergeben (${dest})` : "Übergeben");
+    return result;
+  }
+
+  async function openMediaSyncSheet(track) {
+    if (!mediasyncReady()) {
+      toast("MediaSync unter Mehr verbinden");
+      $("now-playing").hidden = true;
+      navigate({ name: "settings" });
+      return;
+    }
+    openSheet("An MediaSync senden", [element("p", { class: "muted", text: "Lade Ziele …" })]);
+    let targets = [];
+    try {
+      const data = await api("/api/mediasync/targets");
+      targets = data.targets || [];
+    } catch (error) {
+      openSheet("An MediaSync senden", [element("p", { class: "muted", text: error.message })]);
+      return;
+    }
+    let last = {};
+    try {
+      last = JSON.parse(localStorage.getItem(MEDIASYNC_TARGET_KEY) || "{}");
+    } catch (error) {
+      last = {};
+    }
+    const actions = [
+      element("p", {
+        class: "muted",
+        text: `${track.artist} – ${track.title}. MediaSync sucht den Titel und lädt ihn. Optional in eine Playlist dort.`,
+      }),
+      element("button", {
+        class: "action",
+        text: "+ Neue Playlist in MediaSync",
+        onclick: async () => {
+          const name = prompt("Name der MediaSync-Playlist");
+          if (!name) return;
+          try {
+            await sendToMediaSync(track, "", name);
+            closeSheet();
+          } catch (error) {
+            toast(error.message);
+          }
+        },
+      }),
+      ...targets.map((target) =>
+        element("button", {
+          class: `action${last.playlistId === target.id ? " active" : ""}`,
+          text: last.playlistId === target.id ? `✓ ${target.name}` : target.name,
+          onclick: async () => {
+            try {
+              await sendToMediaSync(track, target.id);
+              closeSheet();
+            } catch (error) {
+              toast(error.message);
+            }
+          },
+        })
+      ),
+    ];
+    openSheet("An MediaSync senden", actions);
   }
 
   function renderQueue() {
@@ -1547,6 +2049,10 @@
     event.stopPropagation();
     Player.toggle();
   });
+  $("mini-prev").addEventListener("click", (event) => {
+    event.stopPropagation();
+    Player.previous();
+  });
   $("mini-next").addEventListener("click", (event) => {
     event.stopPropagation();
     Player.next(false);
@@ -1580,24 +2086,81 @@
     setFavoriteButton(track);
   });
 
-  $("np-download").addEventListener("click", async () => {
+  $("np-navidrome").addEventListener("click", async () => {
+    const track = Player.current();
+    if (!track) return;
+    if (!navidromeReady()) {
+      toast("Navidrome unter Mehr verbinden");
+      navigate({ name: "settings" });
+      $("now-playing").hidden = true;
+      return;
+    }
+    if (isLocalTrack(track)) {
+      toast("Bereits in der Navidrome-Bibliothek");
+      return;
+    }
+    $("np-navidrome").textContent = "…";
+    try {
+      await importToNavidrome([track]);
+      setLibraryButtons(track);
+    } catch (error) {
+      toast(error.message);
+      setLibraryButtons(track);
+    }
+  });
+
+  $("np-mediasync").addEventListener("click", () => {
+    const track = Player.current();
+    if (track) openMediaSyncSheet(track);
+  });
+
+  $("np-offline").addEventListener("click", async () => {
     const track = Player.current();
     if (!track) return;
     if (Offline.has(track.id)) {
       await Offline.remove(track.id);
       toast("Offline-Kopie gelöscht");
     } else {
-      $("np-download").textContent = "…";
+      $("np-offline").textContent = "…";
       await Offline.requestPersistence();
       try {
         await Offline.download(track);
-        toast("Offline gespeichert");
+        toast("Offline auf diesem Gerät gespeichert");
       } catch (error) {
         toast(error.message);
       }
     }
-    setDownloadButton(track);
+    setLibraryButtons(track);
     refreshOfflineBadges();
+  });
+
+  $("np-playlist").addEventListener("click", () => {
+    const track = Player.current();
+    if (track) openAddToPlaylistSheet(track);
+  });
+
+  $("np-skip-back").addEventListener("click", () => Player.skipBy(-10));
+  $("np-skip-fwd").addEventListener("click", () => Player.skipBy(10));
+
+  $("np-mute").addEventListener("click", () => {
+    Player.toggleMute();
+    syncVolumeUi();
+    persistPlayer();
+  });
+  $("np-volume").addEventListener("input", (event) => {
+    Player.setVolume(Number(event.target.value) / 100);
+    syncVolumeUi();
+  });
+  $("np-volume").addEventListener("change", () => persistPlayer());
+
+  const PLAYBACK_RATES = [1, 1.25, 1.5, 0.75];
+  $("np-rate").addEventListener("click", () => {
+    const current = Player.settings.rate || 1;
+    const next = PLAYBACK_RATES[(PLAYBACK_RATES.indexOf(current) + 1) % PLAYBACK_RATES.length] || 1;
+    Player.setRate(next);
+    syncRateButton();
+    persistPlayer();
+    toast(`Tempo ${formatRate(next)}`);
   });
 
   $("np-radio").addEventListener("click", () => Player.current() && startRadio(Player.current()));
@@ -1654,12 +2217,20 @@
     try {
       const stored = await api("/api/settings");
       Player.updateSettings({ ...stored.player, ...stored.equalizer });
+      syncVolumeUi();
+      syncRateButton();
     } catch (error) {
       /* defaults are fine */
     }
 
     api("/api/playlists")
       .then((data) => (state.playlists = data.playlists))
+      .catch(() => {});
+    api("/api/navidrome")
+      .then((data) => (state.navidrome = data))
+      .catch(() => {});
+    api("/api/mediasync")
+      .then((data) => (state.mediasync = data))
       .catch(() => {});
 
     state.route = { name: "home" };

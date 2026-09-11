@@ -178,7 +178,7 @@ def album(browse_id: str) -> dict | None:
 
         info["tracks"] = tracks
         info["song_count"] = info.get("song_count") or len(tracks)
-        info["duration"] = info.get("duration") or sum(t["duration"] for t in tracks)
+        info["duration"] = info.get("duration") or sum(int(t.get("duration") or 0) for t in tracks)
         return info
 
     return _cached(f"album:{browse_id}", produce)
@@ -276,7 +276,7 @@ def playlist(playlist_id: str, limit: int = 200) -> dict | None:
 
         info["tracks"] = tracks
         info["song_count"] = info.get("song_count") or len(tracks)
-        info["duration"] = info.get("duration") or sum(t["duration"] for t in tracks)
+        info["duration"] = info.get("duration") or sum(int(t.get("duration") or 0) for t in tracks)
         return info
 
     return _cached(f"playlist:{playlist_id}:{limit}", produce, ttl=900)
@@ -416,10 +416,22 @@ def mood_playlists(params: str) -> list[dict]:
             return []
         items = []
         for entry in raw or []:
-            item = mapper.normalize_playlist(entry)
-            if item:
-                item["kind"] = "playlist"
-                items.append(item)
+            if not isinstance(entry, dict):
+                continue
+            try:
+                browse = str(entry.get("browseId") or entry.get("playlistId") or entry.get("id") or "")
+                if browse.startswith("MPRE") or browse.startswith("VLMPRE"):
+                    item = mapper.normalize_album(entry)
+                    if item:
+                        item["kind"] = "album"
+                        items.append(item)
+                    continue
+                item = mapper.normalize_playlist(entry)
+                if item:
+                    item["kind"] = "playlist"
+                    items.append(item)
+            except Exception as exc:
+                logger.debug("Kategorie-Eintrag übersprungen: {}", exc)
         return items
 
     return _cached(f"mood:{params}", produce, ttl=21600) or []
