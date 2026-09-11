@@ -77,6 +77,17 @@ def parse_duration(value: Any) -> int:
     return seconds
 
 
+def _int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    text = str(value).strip().split()[0].replace(",", "")
+    if text.isdigit():
+        return int(text)
+    return None
+
+
 def parse_year(value: Any) -> int | None:
     if value is None:
         return None
@@ -91,13 +102,12 @@ def _artist_fields(raw: dict) -> tuple[str, str | None]:
         names, channel = [], None
         for entry in artists:
             if isinstance(entry, dict):
-                name = (entry.get("name") or "").strip()
-                # ytmusicapi mixes view counts and durations into this list.
+                name = _text(entry.get("name"))
                 if not name or _DURATION_RE.match(name) or name.endswith("views") or name.endswith("Aufrufe"):
                     continue
                 names.append(name)
                 if channel is None and entry.get("id"):
-                    channel = entry["id"]
+                    channel = _text(entry.get("id")) or None
             elif isinstance(entry, str) and entry.strip():
                 names.append(entry.strip())
         if names:
@@ -108,7 +118,7 @@ def _artist_fields(raw: dict) -> tuple[str, str | None]:
         if isinstance(value, str) and value.strip():
             return value.strip(), raw.get("channelId")
         if isinstance(value, dict) and value.get("name"):
-            return value["name"], value.get("id")
+            return _text(value.get("name")), value.get("id")
 
     return "Unbekannter Interpret", raw.get("channelId")
 
@@ -116,7 +126,7 @@ def _artist_fields(raw: dict) -> tuple[str, str | None]:
 def _album_fields(raw: dict) -> tuple[str, str | None]:
     album = raw.get("album")
     if isinstance(album, dict):
-        return (album.get("name") or "").strip(), album.get("id")
+        return _text(album.get("name")), album.get("id")
     if isinstance(album, str):
         return album.strip(), raw.get("albumId")
     return "", raw.get("albumId")
@@ -127,7 +137,7 @@ def normalize_song(raw: dict, album_hint: dict | None = None) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    video_id = raw.get("videoId") or raw.get("id")
+    video_id = _text(raw.get("videoId") or raw.get("id"))
     if not video_id:
         return None
 
@@ -137,11 +147,11 @@ def normalize_song(raw: dict, album_hint: dict | None = None) -> dict | None:
     thumbnail = pick_thumbnail(raw.get("thumbnails") or raw.get("thumbnail"))
 
     if album_hint:
-        album = album or album_hint.get("name") or ""
+        album = album or _text(album_hint.get("name"))
         album_id = album_id or album_hint.get("id")
         thumbnail = thumbnail or album_hint.get("thumbnail")
         if artist == "Unbekannter Interpret" and album_hint.get("artist"):
-            artist = album_hint["artist"]
+            artist = _text(album_hint.get("artist"), artist)
             artist_id = artist_id or album_hint.get("artist_id")
 
     duration = parse_duration(
@@ -150,19 +160,19 @@ def normalize_song(raw: dict, album_hint: dict | None = None) -> dict | None:
 
     return {
         "id": video_id,
-        "title": (raw.get("title") or "Unbekannter Titel").strip(),
-        "artist": artist,
+        "title": _text(raw.get("title"), "Unbekannter Titel"),
+        "artist": _text(artist, "Unbekannter Interpret"),
         "artist_id": artist_id,
-        "album": album,
+        "album": _text(album),
         "album_id": album_id,
         "duration": duration,
         "thumbnail": thumbnail or f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
         "year": parse_year(raw.get("year") or (album_hint or {}).get("year")),
-        "track_no": raw.get("trackNumber") or raw.get("index"),
+        "track_no": _int(raw.get("trackNumber") or raw.get("index")),
         "disc_no": 1,
-        "genre": (album_hint or {}).get("genre"),
+        "genre": _text((album_hint or {}).get("genre")) or None,
         "explicit": bool(raw.get("isExplicit")),
-        "set_video_id": raw.get("setVideoId"),
+        "set_video_id": raw.get("setVideoId") if isinstance(raw.get("setVideoId"), str) else None,
     }
 
 
@@ -184,10 +194,10 @@ def normalize_album(raw: dict) -> dict | None:
         "artist_id": artist_id,
         "thumbnail": pick_thumbnail(raw.get("thumbnails") or raw.get("thumbnail")),
         "year": parse_year(raw.get("year")),
-        "song_count": raw.get("trackCount") or len(tracks),
+        "song_count": _int(raw.get("trackCount") or raw.get("count")) or len(tracks),
         "duration": parse_duration(raw.get("duration_seconds") or raw.get("duration")),
-        "album_type": raw.get("type"),
-        "description": raw.get("description") or "",
+        "album_type": _text(raw.get("type")) or None,
+        "description": _text(raw.get("description")),
         "audio_playlist_id": raw.get("audioPlaylistId"),
     }
 
@@ -306,8 +316,8 @@ def normalize_playlist(raw: dict) -> dict | None:
         "id": playlist_id,
         "name": _text(raw.get("title") or raw.get("name"), "Playlist"),
         "owner": owner or "YouTube Music",
-        "description": raw.get("description") or "",
+        "description": _text(raw.get("description")),
         "thumbnail": pick_thumbnail(raw.get("thumbnails") or raw.get("thumbnail")),
-        "song_count": raw.get("trackCount") or raw.get("count") or len(raw.get("tracks") or []),
+        "song_count": _int(raw.get("trackCount") or raw.get("count")) or len(raw.get("tracks") or []),
         "duration": parse_duration(raw.get("duration_seconds") or raw.get("duration")),
     }

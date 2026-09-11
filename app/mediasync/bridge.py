@@ -42,3 +42,13 @@ def send(track: dict, playlist_id: str | None = None, playlist_name: str | None 
         raise MediaSyncError("MediaSync ist nicht konfiguriert", 400)
     with MediaSyncClient() as client:
         return client.send(track, playlist_id=playlist_id, playlist_name=playlist_name)
+
+
+def send_many(tracks: list[dict], playlist_id: str | None = None, playlist_name: str | None = None) -> dict:
+    if not config.configured():
+        raise MediaSyncError("MediaSync ist nicht konfiguriert", 400)
+    jobs = []
+    with MediaSyncClient() as client:
+        for track in tracks:
+            jobs.append(client.send(track, playlist_id=playlist_id, playlist_name=playlist_name))
+    return {"ok": True, "jobs": jobs, "job": jobs[0] if len(jobs) == 1 else None}

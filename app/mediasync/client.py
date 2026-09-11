@@ -110,14 +110,10 @@ class MediaSyncClient:
         return [item for item in destinations if item.get("id")]
 
     def send(self, track: dict, playlist_id: str | None = None, playlist_name: str | None = None) -> dict:
-        video_id = track.get("id") or ""
         payload = {
             "artist": track.get("artist") or "",
             "title": track.get("title") or "",
             "album": track.get("album") or "",
-            "youtubeId": video_id if not str(video_id).startswith("nd:") else "",
-            "videoId": video_id if not str(video_id).startswith("nd:") else "",
-            "youtubeUrl": f"https://music.youtube.com/watch?v={video_id}" if video_id and not str(video_id).startswith("nd:") else "",
             "playlistId": playlist_id or "",
             "playlistName": playlist_name or "",
             "source": "music-play",
@@ -137,10 +133,6 @@ class MediaSyncClient:
         playlist_name: str | None,
     ) -> dict:
         """MediaSync 0.3.x native import when /api/ingest is not deployed yet."""
-        video_id = track.get("id") or ""
-        youtube_url = ""
-        if video_id and not str(video_id).startswith("nd:"):
-            youtube_url = f"https://music.youtube.com/watch?v={video_id}"
         target_id = (playlist_id or "").strip()
         if target_id in ("library", "none"):
             target_id = ""
@@ -153,7 +145,6 @@ class MediaSyncClient:
             "new_playlist_name": name or None,
             "target": "library" if not target_id and not name else "playlist",
             "async": True,
-            "youtube_url": youtube_url or None,
         }
         try:
             body = self._post("/api/tracks", native).json()

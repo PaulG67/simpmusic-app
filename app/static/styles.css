@@ -494,3 +494,13 @@ dl.info dd { margin: 0; word-break: break-all; }
 .sheet-body button.action.active { color: var(--accent); }
 .sheet-body button.action:last-child { border-bottom: 0; }
 .sheet-title { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.sheet-body input[type="search"] {
+  width: 100%;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline, rgba(255,255,255,0.12));
+  background: var(--bg);
+  color: inherit;
+  font-size: 15px;
+}

@@ -346,41 +346,70 @@ def home(limit: int = 6) -> list[dict]:
 
 
 def charts(country: str | None = None) -> list[dict]:
-    code = country or settings.ytm_location or "ZZ"
+    codes = []
+    primary = country or settings.ytm_location or "ZZ"
+    for code in (primary, "DE", "ZZ"):
+        if code and code not in codes:
+            codes.append(code)
 
-    def produce() -> list[dict]:
-        try:
-            raw = client().get_charts(country=code)
-        except Exception as exc:
-            logger.warning("Charts für {} nicht verfügbar: {}", code, exc)
-            return []
+    for code in codes:
+        key = f"charts:{code}"
+        hit = _cache.get(key)
+        if hit:
+            return hit
+        sections = _charts_for(code)
+        if sections:
+            _cache.set(key, sections, 3600)
+            return sections
+    return []
 
+
+def _charts_for(code: str) -> list[dict]:
+    try:
+        raw = client().get_charts(country=code)
+    except Exception as exc:
+        logger.warning("Charts für {} nicht verfügbar: {}", code, exc)
+        return []
+
+    try:
         sections = []
         for key, title in (("trending", "Trending"), ("videos", "Top Videos"), ("songs", "Top Songs")):
             block = raw.get(key) or {}
             items = block.get("items") if isinstance(block, dict) else block
             tracks = []
             for raw_track in items or []:
-                track = mapper.normalize_song(raw_track)
+                if not isinstance(raw_track, dict):
+                    continue
+                try:
+                    track = mapper.normalize_song(raw_track)
+                except Exception:
+                    continue
                 if track:
                     track["kind"] = "song"
                     tracks.append(track)
             if tracks:
                 sections.append({"title": title, "items": tracks})
 
-        artists_block = (raw.get("artists") or {}).get("items") or []
+        artists_block = raw.get("artists") or {}
+        if isinstance(artists_block, dict):
+            artists_block = artists_block.get("items") or []
         artists = []
-        for raw_artist in artists_block:
-            item = mapper.normalize_artist(raw_artist)
+        for raw_artist in artists_block or []:
+            if not isinstance(raw_artist, dict):
+                continue
+            try:
+                item = mapper.normalize_artist(raw_artist)
+            except Exception:
+                continue
             if item:
                 item["kind"] = "artist"
                 artists.append(item)
         if artists:
             sections.append({"title": "Top Interpreten", "items": artists})
-
         return sections
-
-    return _cached(f"charts:{code}", produce, ttl=3600) or []
+    except Exception as exc:
+        logger.warning("Charts für {} konnten nicht gelesen werden: {}", code, exc)
+        return []
 
 
 def mood_categories() -> list[dict]:
@@ -396,9 +425,9 @@ def mood_categories() -> list[dict]:
         sections = []
         for title, entries in (raw or {}).items():
             items = [
-                {"title": entry.get("title"), "params": entry.get("params")}
+                {"title": str(entry.get("title") or "").strip(), "params": entry.get("params")}
                 for entry in entries or []
-                if entry.get("params")
+                if entry.get("params") and str(entry.get("title") or "").strip()
             ]
             if items:
                 sections.append({"title": title, "items": items})
@@ -408,33 +437,38 @@ def mood_categories() -> list[dict]:
 
 
 def mood_playlists(params: str) -> list[dict]:
-    def produce() -> list[dict]:
-        try:
-            raw = client().get_mood_playlists(params)
-        except Exception as exc:
-            logger.error("Playlists für Kategorie konnten nicht geladen werden: {}", exc)
-            return []
-        items = []
-        for entry in raw or []:
-            if not isinstance(entry, dict):
-                continue
-            try:
-                browse = str(entry.get("browseId") or entry.get("playlistId") or entry.get("id") or "")
-                if browse.startswith("MPRE") or browse.startswith("VLMPRE"):
-                    item = mapper.normalize_album(entry)
-                    if item:
-                        item["kind"] = "album"
-                        items.append(item)
-                    continue
-                item = mapper.normalize_playlist(entry)
-                if item:
-                    item["kind"] = "playlist"
-                    items.append(item)
-            except Exception as exc:
-                logger.debug("Kategorie-Eintrag übersprungen: {}", exc)
-        return items
+    key = f"mood:{params}"
+    hit = _cache.get(key)
+    if hit:
+        return hit
 
-    return _cached(f"mood:{params}", produce, ttl=21600) or []
+    try:
+        raw = client().get_mood_playlists(params)
+    except Exception as exc:
+        logger.error("Playlists für Kategorie konnten nicht geladen werden: {}", exc)
+        return []
+
+    items = []
+    for entry in raw or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            browse = str(entry.get("browseId") or entry.get("playlistId") or entry.get("id") or "")
+            if browse.startswith("MPRE") or browse.startswith("VLMPRE"):
+                item = mapper.normalize_album(entry)
+                if item:
+                    item["kind"] = "album"
+                    items.append(item)
+                continue
+            item = mapper.normalize_playlist(entry)
+            if item:
+                item["kind"] = "playlist"
+                items.append(item)
+        except Exception as exc:
+            logger.debug("Kategorie-Eintrag übersprungen: {}", exc)
+    if items:
+        _cache.set(key, items, 21600)
+    return items
 
 
 def podcast(podcast_id: str, limit: int = 100) -> dict | None:

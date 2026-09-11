@@ -230,17 +230,15 @@ nicht.
 
 ### MediaSync
 
-MediaSync lädt Titel über MusiKat in die Jellyfin-Bibliothek. Music Play schickt nur
-Interpret + Titel (und optional eine Ziel-Playlist) dorthin.
+Downloads laufen über MediaSync: Suche, Dateiablage in der Bibliothek und
+Playlist-Zuordnung. Music Play schickt Interpret + Titel und die gewählte Playlist.
 
-1. MediaSync-Container auf **0.3.28** aktualisieren (Ingest-API `POST /api/ingest`).
-   Ohne dieses Update nutzt Music Play automatisch `POST /api/tracks` (ab MediaSync 0.3).
-2. In der App *Mehr → MediaSync*: URL der MediaSync-WebUI, z.B.
-   `http://192.168.0.188:<Port>`. Benutzer/Passwort nur, wenn MediaSync das verlangt.
-3. Im Player **MediaSync** tippen (oder im Titelmenü *An MediaSync senden*).
-4. Ziel wählen: **Nur Bibliothek**, eine bestehende Playlist dort, oder *Neue Playlist*.
+1. MediaSync unter *Mehr → MediaSync* verbinden (URL der MediaSync-WebUI).
+2. Im Player **Download** tippen. Es erscheinen die **bestehenden Playlists** dort.
+3. Eine Playlist wählen, *Neue Playlist* anlegen oder nur in die Bibliothek legen.
 
-MediaSync sucht den Titel, lädt ihn und hängt ihn bei Bedarf an die gewählte Jellyfin-Playlist.
+MediaSync lädt mit der bei ihm eingestellten Quelle (YouTube, Usenet, MusiKat …)
+und legt die Datei in der Navidrome-/Jellyfin-Struktur ab.
 
 ### `STREAM_MODE`
 

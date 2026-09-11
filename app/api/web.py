@@ -1,5 +1,7 @@
 """JSON API consumed by the built-in web player."""
 
+from datetime import date, datetime
+
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -46,6 +48,35 @@ def _subsonic_id(item: dict, kind: str) -> str:
     return item_id
 
 
+def _json_item(item: dict) -> dict:
+    """Drop values FastAPI cannot JSON-encode (YouTube leftovers, datetimes)."""
+    clean = {}
+    for key, value in item.items():
+        if value is None or isinstance(value, (str, int, bool)):
+            clean[key] = value
+        elif isinstance(value, float):
+            clean[key] = 0 if value != value or abs(value) == float("inf") else value
+        elif isinstance(value, (datetime, date)):
+            clean[key] = value.isoformat()
+        elif key in {
+            "id",
+            "sid",
+            "kind",
+            "title",
+            "name",
+            "artist",
+            "author",
+            "owner",
+            "thumbnail",
+            "navidromeId",
+            "album",
+        }:
+            text = str(value).strip()
+            if text and text not in {"None", "null"}:
+                clean[key] = text
+    return clean
+
+
 def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
     """Attach the Subsonic id and favourite flag the frontend needs.
 
@@ -69,7 +100,7 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
             logger.debug("Entdecken-Eintrag übersprungen ({}): {}", item_kind, exc)
             continue
         decorated.append({**item, "sid": subsonic_id, "starred": subsonic_id in starred, "kind": item_kind})
-    return navidrome.enrich_items(decorated, kind)
+    return [_json_item(item) for item in navidrome.enrich_items(decorated, kind)]
 
 
 # --------------------------------------------------------------------------
@@ -193,17 +224,25 @@ async def save_account(request: Request, response: Response, payload: dict = Bod
 @router.get("/home")
 async def home(request: Request):
     _require_session(request)
-    sections = await catalog.home()
-    if not sections:
-        sections = await catalog.charts()
-    return {"sections": [{"title": s["title"], "items": _decorate(s["items"])} for s in sections]}
+    try:
+        sections = await catalog.home()
+        if not sections:
+            sections = await catalog.charts()
+        return {"sections": [{"title": s["title"], "items": _decorate(s["items"])} for s in sections]}
+    except Exception as exc:
+        logger.error("Startseite fehlgeschlagen: {}", exc)
+        return {"sections": []}
 
 
 @router.get("/charts")
 async def charts(request: Request):
     _require_session(request)
-    sections = await catalog.charts()
-    return {"sections": [{"title": s["title"], "items": _decorate(s["items"])} for s in sections]}
+    try:
+        sections = await catalog.charts()
+        return {"sections": [{"title": s["title"], "items": _decorate(s["items"])} for s in sections]}
+    except Exception as exc:
+        logger.error("Charts fehlgeschlagen: {}", exc)
+        return {"sections": []}
 
 
 @router.get("/search")
@@ -343,15 +382,23 @@ async def moods(request: Request):
 
 
 @router.get("/mood")
+@router.post("/mood")
 async def mood(request: Request, params: str = ""):
     _require_session(request)
-    if not params.strip():
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        params = (body.get("params") or params or "") if isinstance(body, dict) else params
+    params = (params or "").strip()
+    if not params:
         return {"playlists": []}
     try:
         items = await catalog.mood_playlists(params)
         return {"playlists": _decorate(items)}
     except Exception as exc:
-        logger.error("Playlists für Entdecken-Kategorie fehlgeschlagen: {}", exc)
+        logger.exception("Playlists für Entdecken-Kategorie fehlgeschlagen")
         return {"playlists": []}
 
 
@@ -796,23 +843,36 @@ async def mediasync_send(request: Request, payload: dict = Body(...)):
     _require_session(request)
     if not mediasync.configured():
         raise HTTPException(status_code=400, detail="MediaSync ist nicht konfiguriert")
-    video_id = payload.get("videoId") or payload.get("id")
-    if not video_id:
-        raise HTTPException(status_code=400, detail="videoId fehlt")
-    track = await catalog.get_song(video_id)
-    if track is None:
+
+    raw_items = payload.get("tracks")
+    if not isinstance(raw_items, list) or not raw_items:
+        raw_items = [payload]
+
+    tracks = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        video_id = item.get("videoId") or item.get("id") or payload.get("videoId") or payload.get("id")
         track = {
-            "id": video_id,
-            "title": payload.get("title") or "",
-            "artist": payload.get("artist") or "",
-            "album": payload.get("album") or "",
+            "id": video_id or "",
+            "title": item.get("title") or "",
+            "artist": item.get("artist") or "",
+            "album": item.get("album") or "",
         }
-    if not track.get("title") or not track.get("artist"):
-        raise HTTPException(status_code=400, detail="Titel und Interpret fehlen")
+        if not track["title"] and video_id:
+            found = await catalog.get_song(video_id)
+            if found:
+                track = found
+        if not track.get("title"):
+            continue
+        tracks.append(track)
+
+    if not tracks:
+        raise HTTPException(status_code=400, detail="Titel fehlen")
     try:
         result = await run_in_threadpool(
-            mediasync.send,
-            track,
+            mediasync.send_many,
+            tracks,
             payload.get("playlistId") or None,
             payload.get("playlistName") or None,
         )
