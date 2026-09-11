@@ -5,11 +5,11 @@ Supports the three schemes clients use in practice: plaintext `p`, hex-encoded
 """
 
 import hashlib
-import hmac
 from typing import Protocol
 
 from fastapi import Request
 
+from app.api.session import secrets_equal
 from app.core.settings import settings
 from app.subsonic.response import (
     ERROR_BAD_CREDENTIALS,
@@ -44,7 +44,7 @@ def authenticate(request: Request, params: ParamSource) -> str:
     if not username:
         raise SubsonicError(ERROR_MISSING_PARAM, "Erforderlicher Parameter 'u' fehlt")
 
-    if not hmac.compare_digest(username, settings.subsonic_user):
+    if not secrets_equal(username, settings.subsonic_user):
         raise SubsonicError(ERROR_BAD_CREDENTIALS, "Benutzername oder Passwort falsch")
 
     token = params.get("t")
@@ -53,17 +53,17 @@ def authenticate(request: Request, params: ParamSource) -> str:
 
     if token and salt:
         expected = hashlib.md5((settings.subsonic_password + salt).encode("utf-8")).hexdigest()
-        if not hmac.compare_digest(expected, token.lower()):
+        if not secrets_equal(expected, token.lower()):
             raise SubsonicError(ERROR_BAD_CREDENTIALS, "Benutzername oder Passwort falsch")
         return username
 
     if password is not None:
-        if not hmac.compare_digest(_decode_password(password), settings.subsonic_password):
+        if not secrets_equal(_decode_password(password), settings.subsonic_password):
             raise SubsonicError(ERROR_BAD_CREDENTIALS, "Benutzername oder Passwort falsch")
         return username
 
     if params.get("apiKey"):
-        if not hmac.compare_digest(params["apiKey"], settings.subsonic_password):
+        if not secrets_equal(params["apiKey"], settings.subsonic_password):
             raise SubsonicError(ERROR_BAD_CREDENTIALS, "API-Key ungültig")
         return username
 

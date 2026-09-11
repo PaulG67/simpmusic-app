@@ -36,7 +36,9 @@
     });
     if (response.status === 401) {
       $("login").hidden = false;
-      throw new Error("Nicht angemeldet");
+      const payload = await response.json().catch(() => ({}));
+      const message = typeof payload.detail === "string" ? payload.detail : "Nicht angemeldet";
+      throw new Error(message);
     }
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}));
@@ -119,17 +121,32 @@
 
   // ------------------------------------------------------------------ login
 
+  async function prefillLogin() {
+    try {
+      const hint = await fetch("/api/login-hint", { credentials: "same-origin" }).then((r) => r.json());
+      if (hint.username && !$("login-user").value) $("login-user").value = hint.username;
+    } catch (_error) {
+      if (!$("login-user").value) $("login-user").value = "musicplay";
+    }
+  }
+
   $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const error = $("login-error");
     error.hidden = true;
     try {
-      await api("/api/login", { method: "POST", body: { password: $("login-password").value } });
+      await api("/api/login", {
+        method: "POST",
+        body: {
+          username: $("login-user").value.trim(),
+          password: $("login-password").value,
+        },
+      });
       $("login").hidden = true;
       $("login-password").value = "";
       boot();
     } catch (exception) {
-      error.textContent = "Passwort falsch.";
+      error.textContent = exception.message || "Anmeldung fehlgeschlagen.";
       error.hidden = false;
     }
   });
@@ -1600,5 +1617,6 @@
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
 
+  prefillLogin();
   boot().catch(() => ($("login").hidden = false));
 })();

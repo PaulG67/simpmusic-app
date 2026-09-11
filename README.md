@@ -125,6 +125,11 @@ Dann in der Unraid-WebUI:
 
 WebUI: `http://<unraid-ip>:5060`
 
+Anmeldung: Benutzername aus dem Feld **Benutzername** (Standard `musicplay`) und
+Passwort aus dem Feld **Passwort** – nicht aus dem Config-Pfad. Steht das
+Passwort-Feld leer, gilt `musicplay`. Zeichen wie `$` im Passwort vermeiden
+(Unraid wertet sie als Variablen aus).
+
 Das Image kommt von `ghcr.io/paulg67/music-play:latest`. Updates später über
 **Docker → music-play → Force Update**.
 

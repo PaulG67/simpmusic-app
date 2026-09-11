@@ -8,16 +8,33 @@ from pydantic import BaseModel
 load_dotenv()
 
 APP_NAME = "Music Play"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 SUBSONIC_API_VERSION = "1.16.1"
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", "/cache"))
 LOG_DIR = Path(os.getenv("LOG_DIR", "/logs"))
 
+# Optional extra file in the Unraid config share. Existing Docker env wins.
+load_dotenv(CONFIG_DIR / ".env")
+
+
+def _env(name: str, default: str = "") -> str:
+    """Read an env var, treating blank Unraid fields as unset.
+
+    Unraid always injects template variables, even when the password box is
+    empty. `os.getenv("SUBSONIC_PASSWORD", "musicplay")` would then return ""
+    instead of the default, and login would reject every non-empty password.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return default
+    stripped = str(value).strip().lstrip("\ufeff")
+    return stripped if stripped else default
+
 
 def _bool(name: str, default: bool) -> bool:
-    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+    return _env(name, str(default)).lower() in ("1", "true", "yes", "on")
 
 
 def _session_secret() -> str:
@@ -39,8 +56,8 @@ class Settings(BaseModel):
     app_name: str = APP_NAME
     app_version: str = APP_VERSION
 
-    subsonic_user: str = os.getenv("SUBSONIC_USER", "musicplay")
-    subsonic_password: str = os.getenv("SUBSONIC_PASSWORD", "musicplay")
+    subsonic_user: str = _env("SUBSONIC_USER", "musicplay")
+    subsonic_password: str = _env("SUBSONIC_PASSWORD", "musicplay")
     session_secret: str = ""
 
     server_url: str = os.getenv("SERVER_URL", "").rstrip("/")

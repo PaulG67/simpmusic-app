@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -28,7 +29,12 @@ async def lifespan(_: FastAPI):
         settings.subsonic_user,
         settings.stream_mode,
     )
-    if settings.subsonic_password == "musicplay":
+    raw_password = os.getenv("SUBSONIC_PASSWORD")
+    if raw_password is None or not str(raw_password).strip():
+        logger.warning(
+            "SUBSONIC_PASSWORD ist leer - Anmeldung mit Standardpasswort 'musicplay'"
+        )
+    elif settings.subsonic_password == "musicplay":
         logger.warning("Standardpasswort aktiv - bitte SUBSONIC_PASSWORD setzen")
     yield
     await media.aclose()

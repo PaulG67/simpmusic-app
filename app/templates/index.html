@@ -23,8 +23,9 @@
   <div class="login-card">
     <img src="/static/icons/icon.svg" alt="" width="72" height="72">
     <h1>Music Play</h1>
-    <p>Melde dich mit dem Passwort aus deiner Unraid-Konfiguration an.</p>
+    <p>Benutzername und Passwort aus der Unraid-Vorlage (Felder «Benutzername» und «Passwort», nicht der Config-Pfad).</p>
     <form id="login-form">
+      <input type="text" id="login-user" placeholder="Benutzername" autocomplete="username" autocapitalize="none" spellcheck="false" required>
       <input type="password" id="login-password" placeholder="Passwort" autocomplete="current-password" required>
       <button type="submit">Anmelden</button>
     </form>

@@ -5,6 +5,7 @@ gets a signed cookie so the `<audio>` element can hit the stream endpoint
 without credentials in the URL.
 """
 
+import hashlib
 import hmac
 
 from fastapi import Request
@@ -18,8 +19,16 @@ MAX_AGE = 60 * 60 * 24 * 90
 _serializer = URLSafeTimedSerializer(settings.session_secret, salt="music-play-session")
 
 
+def secrets_equal(left: str | None, right: str | None) -> bool:
+    """Length-safe comparison. hmac.compare_digest raises if sizes differ."""
+    digest = hashlib.sha256
+    a = digest((left or "").encode("utf-8")).digest()
+    b = digest((right or "").encode("utf-8")).digest()
+    return hmac.compare_digest(a, b)
+
+
 def check_password(password: str) -> bool:
-    return hmac.compare_digest(password or "", settings.subsonic_password)
+    return secrets_equal(password, settings.subsonic_password)
 
 
 def issue(username: str) -> str:

@@ -60,10 +60,19 @@ def _decorate(items: list[dict], kind: str | None = None) -> list[dict]:
 # --------------------------------------------------------------------------
 
 
+@router.get("/login-hint")
+async def login_hint():
+    return {"username": settings.subsonic_user}
+
+
 @router.post("/login")
 async def login(response: Response, payload: dict = Body(...)):
-    if not web_session.check_password(payload.get("password", "")):
-        raise HTTPException(status_code=401, detail="Passwort falsch")
+    username = (payload.get("username") or "").strip() or settings.subsonic_user
+    password = payload.get("password") or ""
+    user_ok = web_session.secrets_equal(username, settings.subsonic_user)
+    pass_ok = web_session.check_password(password)
+    if not user_ok or not pass_ok:
+        raise HTTPException(status_code=401, detail="Benutzername oder Passwort falsch")
 
     response.set_cookie(
         web_session.COOKIE_NAME,
@@ -71,6 +80,7 @@ async def login(response: Response, payload: dict = Body(...)):
         max_age=web_session.MAX_AGE,
         httponly=True,
         samesite="lax",
+        path="/",
     )
     return {"user": settings.subsonic_user}
 
