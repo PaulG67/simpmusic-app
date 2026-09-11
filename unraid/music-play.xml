@@ -29,7 +29,7 @@
   <WebUI>http://[IP]:[PORT:5080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/PaulG67/music-play/main/unraid/music-play.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/PaulG67/music-play/main/app/static/icons/icon.svg</Icon>
-  <ExtraParams>--memory=2g</ExtraParams>
+  <ExtraParams>--memory=2g --cap-add=NET_BIND_SERVICE</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
@@ -42,7 +42,7 @@
           Type="Port" Display="always" Required="true" Mask="false">5080</Config>
 
   <Config Name="App-Port" Target="PORT" Default="5080" Mode=""
-          Description="Port im Container. Bei eigener IP (br0) ist das der Port in der URL. 80 = http://IP ohne Port. Nicht 5060."
+          Description="Port, auf dem die App wirklich lauscht. Bei eigener IP (br0) zählt NUR dieses Feld, nicht WebUI Port. 80 = http://IP ohne Port. Nicht 5060."
           Type="Variable" Display="always" Required="true" Mask="false">5080</Config>
 
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/music-play/config" Mode="rw"
