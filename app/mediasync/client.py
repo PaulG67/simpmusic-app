@@ -126,9 +126,55 @@ class MediaSyncClient:
             body = self._post("/api/ingest", payload).json()
         except MediaSyncError as exc:
             if exc.status_code == 404:
+                return self._send_tracks_api(track, playlist_id, playlist_name)
+            raise
+        return body
+
+    def _send_tracks_api(
+        self,
+        track: dict,
+        playlist_id: str | None,
+        playlist_name: str | None,
+    ) -> dict:
+        """MediaSync 0.3.x native import when /api/ingest is not deployed yet."""
+        video_id = track.get("id") or ""
+        youtube_url = ""
+        if video_id and not str(video_id).startswith("nd:"):
+            youtube_url = f"https://music.youtube.com/watch?v={video_id}"
+        target_id = (playlist_id or "").strip()
+        if target_id in ("library", "none"):
+            target_id = ""
+        name = (playlist_name or "").strip()
+        native = {
+            "artist": track.get("artist") or "",
+            "title": track.get("title") or "",
+            "album": track.get("album") or "",
+            "playlist_id": target_id or None,
+            "new_playlist_name": name or None,
+            "target": "library" if not target_id and not name else "playlist",
+            "async": True,
+            "youtube_url": youtube_url or None,
+        }
+        try:
+            body = self._post("/api/tracks", native).json()
+        except MediaSyncError as exc:
+            if exc.status_code == 404:
                 raise MediaSyncError(
-                    "MediaSync hat keine Ingest-API. Den MediaSync-Container auf 0.2.0 aktualisieren.",
+                    "MediaSync kann keine Titel entgegennehmen. Container auf 0.3.28 aktualisieren.",
                     404,
                 ) from exc
             raise
-        return body
+        job_id = body.get("job_id") or ""
+        return {
+            "ok": True,
+            "job": {
+                "id": job_id,
+                "status": "queued" if job_id else body.get("status") or "done",
+                "artist": body.get("artist") or track.get("artist") or "",
+                "title": body.get("title") or track.get("title") or "",
+                "playlistId": target_id,
+                "playlistName": name,
+                "error": None,
+                "result": None,
+            },
+        }

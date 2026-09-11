@@ -233,8 +233,8 @@ nicht.
 MediaSync lädt Titel über MusiKat in die Jellyfin-Bibliothek. Music Play schickt nur
 Interpret + Titel (und optional eine Ziel-Playlist) dorthin.
 
-1. MediaSync-Container auf **0.2.0** aktualisieren (Ingest-API `POST /api/ingest`).
-   Ohne dieses Update antwortet MediaSync mit 404.
+1. MediaSync-Container auf **0.3.28** aktualisieren (Ingest-API `POST /api/ingest`).
+   Ohne dieses Update nutzt Music Play automatisch `POST /api/tracks` (ab MediaSync 0.3).
 2. In der App *Mehr → MediaSync*: URL der MediaSync-WebUI, z.B.
    `http://192.168.0.188:<Port>`. Benutzer/Passwort nur, wenn MediaSync das verlangt.
 3. Im Player **MediaSync** tippen (oder im Titelmenü *An MediaSync senden*).
@@ -300,7 +300,7 @@ Internet kommt. Im Log stehen die Fehler von ytmusicapi im Klartext.
 aktuelle Status.
 
 **MediaSync: „keine Ingest-API"**
-Der laufende MediaSync-Container ist älter als 0.2.0. Image neu bauen und den Container
+Der laufende MediaSync-Container ist älter als 0.3. Image neu bauen und den Container
 neu starten. Unter *Mehr* muss die URL erreichbar sein (`/health`).
 
 ## Projektstruktur
