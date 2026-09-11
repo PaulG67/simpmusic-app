@@ -37,7 +37,7 @@ def _require_session(request: Request) -> str:
 
 def _subsonic_id(item: dict, kind: str) -> str:
     item_id = item.get("id") or ""
-    if kind == "song":
+    if kind in {"song", "video", "episode"}:
         return ids.song_id(item_id)
     if kind == "album":
         return ids.album_id(item_id)
@@ -70,6 +70,8 @@ def _json_item(item: dict) -> dict:
             "thumbnail",
             "navidromeId",
             "album",
+            "views",
+            "subscribers",
         }:
             text = str(value).strip()
             if text and text not in {"None", "null"}:
@@ -254,17 +256,25 @@ async def search(request: Request, q: str = "", scope: str = "all", limit: int =
     if scope == "all":
         results = await catalog.search(q, song_limit=limit, album_limit=12, artist_limit=12)
         library = await navidrome.search(q, limit=limit)
-        ytm_songs = _decorate(results["songs"], "song")
+        ytm_songs = _decorate(results.get("songs") or [], "song")
         seen = {(song.get("navidromeId") or "").lower() for song in ytm_songs if song.get("navidromeId")}
         extra_songs = [
             song
             for song in library.get("songs") or []
             if (song.get("navidromeId") or "").lower() not in seen
         ]
+        top = results.get("top")
         return {
+            "top": (_decorate([top], top.get("kind") or "playlist") or [None])[0] if top else None,
+            "items": _decorate(results.get("items") or []),
             "songs": ytm_songs,
-            "albums": _decorate(results["albums"], "album"),
-            "artists": _decorate(results["artists"], "artist"),
+            "videos": _decorate(results.get("videos") or [], "song"),
+            "albums": _decorate(results.get("albums") or [], "album"),
+            "artists": _decorate(results.get("artists") or [], "artist"),
+            "playlists": _decorate(results.get("playlists") or [], "playlist"),
+            "community_playlists": _decorate(results.get("community_playlists") or [], "playlist"),
+            "podcasts": _decorate(results.get("podcasts") or [], "podcast"),
+            "episodes": _decorate(results.get("episodes") or [], "song"),
             "library": {
                 "songs": _decorate(extra_songs, "song"),
                 "albums": library.get("albums") or [],

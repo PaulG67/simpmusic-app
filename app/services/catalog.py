@@ -40,7 +40,7 @@ async def search(query: str, song_limit: int = 25, album_limit: int = 12, artist
 
     def persist() -> None:
         with session_scope() as session:
-            repo.upsert_tracks(session, results.get("songs") or [])
+            repo.upsert_tracks(session, (results.get("songs") or []) + (results.get("videos") or []))
             for album in results.get("albums") or []:
                 repo.upsert_album(session, album)
             for artist in results.get("artists") or []:

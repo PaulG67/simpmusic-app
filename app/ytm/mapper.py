@@ -173,6 +173,8 @@ def normalize_song(raw: dict, album_hint: dict | None = None) -> dict | None:
         "genre": _text((album_hint or {}).get("genre")) or None,
         "explicit": bool(raw.get("isExplicit")),
         "set_video_id": raw.get("setVideoId") if isinstance(raw.get("setVideoId"), str) else None,
+        "views": _text(raw.get("views") or raw.get("viewCount")),
+        "isVideo": str(raw.get("resultType") or "").lower() == "video",
     }
 
 

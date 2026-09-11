@@ -78,6 +78,89 @@ def clear_cache() -> None:
 # --------------------------------------------------------------------------
 
 
+def _infer_result_type(raw: dict, scope: str = "") -> str:
+    result_type = str(raw.get("resultType") or "").strip().lower()
+    if result_type:
+        if result_type in {"community_playlist", "featured_playlist"}:
+            return "playlist"
+        return result_type
+    if raw.get("videoId"):
+        return "video" if raw.get("views") and not raw.get("album") else "song"
+    browse_id = str(raw.get("browseId") or "")
+    if raw.get("playlistId") or browse_id.startswith(("VL", "RD")):
+        return "playlist"
+    if raw.get("podcastId"):
+        return "podcast"
+    if raw.get("subscribers") is not None or (raw.get("artist") and not raw.get("artists")):
+        return "artist"
+    if browse_id.startswith("MP") or raw.get("year") or raw.get("type") in {"Album", "EP", "Single"}:
+        return "album"
+    scope = (scope or "").lower()
+    if "playlist" in scope:
+        return "playlist"
+    if scope in SEARCH_FILTERS:
+        return scope.rstrip("s")
+    return ""
+
+
+def _item_from_search(raw: dict, scope: str = "") -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    result_type = _infer_result_type(raw, scope)
+    if result_type in {"song", "video"}:
+        item = mapper.normalize_song(raw)
+        if item:
+            item["kind"] = "song"
+            item["isVideo"] = result_type == "video" or bool(item.get("isVideo"))
+        return item
+    if result_type == "episode":
+        item = mapper.normalize_episode(raw)
+        if item:
+            item["kind"] = "song"
+            item["isEpisode"] = True
+        return item
+    if result_type == "album":
+        item = mapper.normalize_album(raw)
+    elif result_type == "artist":
+        item = mapper.normalize_artist(raw)
+    elif result_type == "playlist":
+        item = mapper.normalize_playlist(raw)
+    elif result_type == "podcast":
+        item = mapper.normalize_podcast(raw)
+    else:
+        return None
+    if item:
+        item["kind"] = "podcast" if result_type == "podcast" else result_type
+    return item
+
+
+def _is_top_category(category: str) -> bool:
+    text = (category or "").lower()
+    return "top result" in text or "top-ergebnis" in text or "bestes ergebnis" in text
+
+
+def _playlist_bucket(category: str) -> str:
+    text = (category or "").lower()
+    if "community" in text:
+        return "community_playlists"
+    return "playlists"
+
+
+def _empty_search() -> dict:
+    return {
+        "top": None,
+        "items": [],
+        "songs": [],
+        "videos": [],
+        "albums": [],
+        "artists": [],
+        "playlists": [],
+        "community_playlists": [],
+        "podcasts": [],
+        "episodes": [],
+    }
+
+
 def search(query: str, scope: str = "songs", limit: int = 25) -> list[dict]:
     query = (query or "").strip()
     if not query:
@@ -85,51 +168,133 @@ def search(query: str, scope: str = "songs", limit: int = 25) -> list[dict]:
 
     ytm_filter = SEARCH_FILTERS.get(scope)
     key = f"search:{scope}:{limit}:{query.lower()}"
+    hit = _cache.get(key)
+    if hit is not None:
+        return hit
 
-    def produce() -> list[dict]:
-        try:
-            results = client().search(query, filter=ytm_filter, limit=limit)
-        except Exception as exc:
-            logger.error("Suche fehlgeschlagen ({}): {}", scope, exc)
-            return []
-        return _normalize_results(results, scope)
-
-    return _cached(key, produce, ttl=900) or []
+    try:
+        results = client().search(query, filter=ytm_filter, limit=limit)
+    except Exception as exc:
+        logger.error("Suche fehlgeschlagen ({}): {}", scope, exc)
+        return []
+    normalized = _normalize_results(results, scope)
+    if normalized:
+        _cache.set(key, normalized, 900)
+    return normalized
 
 
 def _normalize_results(results: list[dict], scope: str) -> list[dict]:
     normalized: list[dict] = []
     for raw in results or []:
-        result_type = raw.get("resultType") or scope.rstrip("s")
-        if result_type in ("song", "video", "episode"):
-            item = mapper.normalize_episode(raw) if result_type == "episode" else mapper.normalize_song(raw)
-            kind = "song"
-        elif result_type == "album":
-            item = mapper.normalize_album(raw)
-            kind = "album"
-        elif result_type == "artist":
-            item = mapper.normalize_artist(raw)
-            kind = "artist"
-        elif result_type == "playlist":
-            item = mapper.normalize_playlist(raw)
-            kind = "playlist"
-        elif result_type == "podcast":
-            item = mapper.normalize_podcast(raw)
-            kind = "podcast"
-        else:
-            continue
+        item = _item_from_search(raw, scope)
         if item:
-            item["kind"] = kind
             normalized.append(item)
     return normalized
 
 
+def _extend_unique(bucket: list[dict], extra: list[dict], seen: set[str]) -> None:
+    for item in extra or []:
+        item_id = str(item.get("id") or "")
+        if item_id and item_id in seen:
+            continue
+        if item_id:
+            seen.add(item_id)
+        bucket.append(item)
+
+
 def search_all(query: str, song_limit: int = 25, album_limit: int = 10, artist_limit: int = 10) -> dict:
-    return {
-        "songs": search(query, "songs", song_limit),
-        "albums": search(query, "albums", album_limit),
-        "artists": search(query, "artists", artist_limit),
-    }
+    """Unfiltered YouTube Music search (playlists first), with typed fallbacks."""
+    query = (query or "").strip()
+    if not query:
+        return _empty_search()
+
+    key = f"searchall:{song_limit}:{album_limit}:{artist_limit}:{query.lower()}"
+    hit = _cache.get(key)
+    if hit is not None:
+        return hit
+
+    grouped = _empty_search()
+    seen: set[str] = set()
+    try:
+        results = client().search(query, limit=max(song_limit, 40))
+    except Exception as exc:
+        logger.error("Suche fehlgeschlagen: {}", exc)
+        results = []
+
+    for raw in results or []:
+        item = _item_from_search(raw)
+        if not item:
+            continue
+        item_id = str(item.get("id") or "")
+        if item_id and item_id in seen:
+            continue
+        if item_id:
+            seen.add(item_id)
+
+        kind = item.get("kind")
+        category = raw.get("category") or ""
+        is_top = _is_top_category(category)
+        if is_top and grouped["top"] is None:
+            grouped["top"] = item
+
+        if kind == "song" and item.get("isEpisode"):
+            bucket = "episodes"
+        elif kind == "song" and item.get("isVideo"):
+            bucket = "videos"
+        elif kind == "song":
+            bucket = "songs"
+        elif kind == "playlist":
+            bucket = _playlist_bucket(category)
+        elif kind == "album":
+            bucket = "albums"
+        elif kind == "artist":
+            bucket = "artists"
+        elif kind == "podcast":
+            bucket = "podcasts"
+        else:
+            continue
+
+        grouped[bucket].append(item)
+        if not is_top:
+            grouped["items"].append(item)
+
+    if not grouped["playlists"] and not grouped["community_playlists"]:
+        _extend_unique(grouped["playlists"], search(query, "featured_playlists", 12), seen)
+        _extend_unique(grouped["community_playlists"], search(query, "community_playlists", 12), seen)
+        if not grouped["playlists"]:
+            _extend_unique(grouped["playlists"], search(query, "playlists", 12), seen)
+    if len(grouped["songs"]) < 5:
+        _extend_unique(grouped["songs"], search(query, "songs", song_limit), seen)
+    if not grouped["videos"]:
+        _extend_unique(grouped["videos"], search(query, "videos", 12), seen)
+    if not grouped["albums"]:
+        _extend_unique(grouped["albums"], search(query, "albums", album_limit), seen)
+    if not grouped["artists"]:
+        _extend_unique(grouped["artists"], search(query, "artists", artist_limit), seen)
+
+    if grouped["top"] is None:
+        grouped["top"] = next(
+            (item for item in (grouped["playlists"] + grouped["community_playlists"] + grouped["artists"] + grouped["songs"]) if item),
+            None,
+        )
+
+    if not grouped["items"]:
+        grouped["items"] = [
+            item
+            for item in (
+                grouped["playlists"]
+                + grouped["community_playlists"]
+                + grouped["songs"]
+                + grouped["videos"]
+                + grouped["artists"]
+                + grouped["albums"]
+            )
+            if item is not grouped["top"]
+        ]
+
+    if grouped["top"] or grouped["items"]:
+        _cache.set(key, grouped, 900)
+    return grouped
 
 
 def suggestions(query: str) -> list[str]:

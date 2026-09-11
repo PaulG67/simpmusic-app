@@ -248,23 +248,125 @@
     return element("div", {}, tracks.map((track, position) => trackRow(track, tracks, position, options)));
   }
 
-  function itemCard(item) {
-    const open = {
-      song: () => Player.play([item], 0),
-      album: () => navigate({ name: "album", id: item.id }),
-      artist: () => navigate({ name: "artist", id: item.id }),
-      playlist: () => {
-        if (item.source === "navidrome" || String(item.id || "").startsWith("nd:")) {
-          navigate({ name: "nplaylist", id: String(item.id).replace(/^nd:/, "") });
-        } else {
-          navigate({ name: "ytplaylist", id: item.id, title: item.name });
+  function openItem(item) {
+    const kind = item.kind || "song";
+    if (kind === "album") return navigate({ name: "album", id: item.id });
+    if (kind === "artist") return navigate({ name: "artist", id: item.id });
+    if (kind === "podcast") return navigate({ name: "podcast", id: item.id });
+    if (kind === "playlist") {
+      if (item.source === "navidrome" || String(item.id || "").startsWith("nd:")) {
+        navigate({ name: "nplaylist", id: String(item.id).replace(/^nd:/, "") });
+      } else {
+        navigate({ name: "ytplaylist", id: item.id, title: item.name || item.title });
+      }
+      return;
+    }
+    Player.play([item], 0);
+  }
+
+  async function playSearchCollection(item, shuffle = false) {
+    if (!item) return;
+    if (item.kind === "playlist") {
+      toast("Lädt Playlist …");
+      try {
+        const playlist = await api(`/api/ytplaylist/${encodeURIComponent(item.id)}`);
+        const tracks = playlist.tracks || [];
+        if (!tracks.length) {
+          toast("Playlist ist leer");
+          return;
         }
-      },
-      podcast: () => navigate({ name: "podcast", id: item.id }),
-    };
+        if (shuffle) {
+          Player.shuffle = true;
+          Player.play(tracks, Math.floor(Math.random() * tracks.length));
+        } else {
+          Player.play(tracks, 0);
+        }
+      } catch (error) {
+        toast(error.message || "Playlist nicht ladbar");
+      }
+      return;
+    }
+    if (item.kind === "album") return navigate({ name: "album", id: item.id });
+    if (item.kind === "artist") return navigate({ name: "artist", id: item.id });
+    Player.play([item], 0);
+  }
+
+  function searchSubtitle(item) {
+    const kind = item.kind || "song";
+    if (kind === "playlist") {
+      const bits = ["Playlist", item.owner || "YouTube Music"];
+      if (item.song_count) bits.push(`${item.song_count} Songs`);
+      return bits.join(" • ");
+    }
+    if (kind === "artist") {
+      const bits = ["Künstler"];
+      if (item.subscribers) {
+        const text = String(item.subscribers);
+        bits.push(/abonn/i.test(text) ? text : `${text} Abonnenten`);
+      }
+      return bits.join(" • ");
+    }
+    if (kind === "album") return ["Album", item.artist, item.year].filter(Boolean).join(" • ");
+    if (kind === "podcast") return ["Podcast", item.author].filter(Boolean).join(" • ");
+    if (item.isEpisode) return ["Folge", item.artist || item.album].filter(Boolean).join(" • ");
+    if (item.isVideo) return ["Video", item.artist, item.views].filter(Boolean).join(" • ");
+    return [item.artist, item.album].filter(Boolean).join(" • ");
+  }
+
+  function searchHitRow(item) {
+    return element("button", { class: "list-card", onclick: () => openItem(item) }, [
+      cover(item.thumbnail, 48),
+      element("div", {}, [
+        element("strong", { text: item.title || item.name }),
+        element("span", { text: searchSubtitle(item) }),
+      ]),
+    ]);
+  }
+
+  function searchTopCard(item) {
+    if (!item) return null;
+    const playable = item.kind === "playlist" || item.kind === "song" || item.isVideo;
+    return element("div", { class: "search-top", onclick: () => openItem(item) }, [
+      cover(item.thumbnail, 72),
+      element("div", { class: "search-top-meta" }, [
+        element("strong", { text: item.title || item.name }),
+        element("span", { text: searchSubtitle(item) }),
+        playable
+          ? element("div", { class: "search-top-actions" }, [
+              item.kind === "playlist"
+                ? element("button", {
+                    class: "chip",
+                    text: "Zufallsmix",
+                    onclick: (event) => {
+                      event.stopPropagation();
+                      playSearchCollection(item, true);
+                    },
+                  })
+                : null,
+              element("button", {
+                class: "chip solid",
+                text: "Wiedergeben",
+                onclick: (event) => {
+                  event.stopPropagation();
+                  playSearchCollection(item, false);
+                },
+              }),
+            ])
+          : null,
+      ]),
+      element("button", {
+        class: "icon-button search-top-open",
+        "aria-label": "Öffnen",
+        text: "›",
+        onclick: () => openItem(item),
+      }),
+    ]);
+  }
+
+  function itemCard(item) {
     return element(
       "button",
-      { class: `card ${item.kind === "artist" ? "round" : ""}`, onclick: open[item.kind] || open.song },
+      { class: `card ${item.kind === "artist" ? "round" : ""}`, onclick: () => openItem(item) },
       [
         cover(item.thumbnail, 142),
         element("strong", { text: item.title || item.name }),
@@ -352,12 +454,106 @@
     const results = element("div", {});
     const form = element("form", { class: "search-bar" }, [input]);
 
+    function uniqueById(items) {
+      const seen = new Set();
+      return (items || []).filter((item) => {
+        const id = String(item.id || item.sid || "");
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    }
+
+    function paintSearch(music, podcasts, filter) {
+      const library = music.library || {};
+      const extraPodcasts = uniqueById([...(music.podcasts || []), ...(podcasts.podcasts || [])]);
+      const extraEpisodes = uniqueById([...(music.episodes || []), ...(podcasts.episodes || [])]);
+      const buckets = {
+        all: music.items || [],
+        playlists: music.playlists || [],
+        community: music.community_playlists || [],
+        artists: music.artists || [],
+        videos: music.videos || [],
+        songs: music.songs || [],
+        albums: music.albums || [],
+        podcasts: extraPodcasts,
+        episodes: extraEpisodes,
+      };
+      const chips = [
+        ["all", "Alle"],
+        ["playlists", "Angesagte Playlists"],
+        ["community", "Community-Playlists"],
+        ["artists", "Künstler"],
+        ["videos", "Videos"],
+        ["songs", "Titel"],
+        ["albums", "Alben"],
+        ["podcasts", "Podcasts"],
+        ["episodes", "Folgen"],
+      ].filter(([key]) => key === "all" || (buckets[key] && buckets[key].length));
+
+      const active = chips.some(([key]) => key === filter) ? filter : "all";
+      renderSearch.lastFilter = active;
+
+      const fragment = document.createDocumentFragment();
+      fragment.append(
+        element(
+          "div",
+          { class: "search-filters" },
+          chips.map(([key, label]) =>
+            element("button", {
+              class: `chip${key === active ? " active" : ""}`,
+              text: label,
+              onclick: () => paintSearch(music, podcasts, key),
+            })
+          )
+        )
+      );
+
+      if ((library.songs || []).length) {
+        fragment.append(
+          element("div", { class: "section" }, [element("h2", { text: "In Navidrome" }), trackList(library.songs)])
+        );
+      }
+
+      if (active === "all") {
+        const top = music.top;
+        if (top) fragment.append(searchTopCard(top));
+        const rest = (buckets.all || []).filter((item) => !top || item.id !== top.id);
+        rest.forEach((item) => {
+          if (item.kind === "song" && !item.isVideo && !item.isEpisode) {
+            const queue = buckets.songs.length ? buckets.songs : [item];
+            const index = Math.max(0, queue.findIndex((song) => song.id === item.id));
+            fragment.append(trackRow(item, queue, index));
+          } else fragment.append(searchHitRow(item));
+        });
+        if (!top && !rest.length && !extraPodcasts.length) {
+          fragment.append(element("div", { class: "empty", text: "Nichts gefunden." }));
+        } else if (!top && !rest.length && extraPodcasts.length) {
+          extraPodcasts.forEach((item) => fragment.append(searchHitRow(item)));
+        }
+      } else if (active === "songs") {
+        fragment.append(trackList(buckets.songs));
+      } else if (active === "episodes") {
+        fragment.append(trackList(buckets.episodes));
+      } else if (active === "artists" || active === "albums") {
+        fragment.append(element("div", { class: "row" }, buckets[active].map(itemCard)));
+      } else {
+        buckets[active].forEach((item) => fragment.append(searchHitRow(item)));
+      }
+
+      if (!fragment.querySelector(".search-top, .list-card, .track, .card, .empty")) {
+        fragment.append(element("div", { class: "empty", text: "Nichts gefunden." }));
+      }
+      results.replaceChildren(fragment);
+    }
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       input.blur();
       const query = input.value.trim();
       if (!query) return;
       renderSearch.lastQuery = query;
+      renderSearch.lastFilter = "all";
       results.replaceChildren(element("div", { class: "spinner", text: "Sucht …" }));
 
       const [music, podcasts] = await Promise.all([
@@ -367,30 +563,7 @@
           episodes: [],
         })),
       ]);
-
-      const fragment = document.createDocumentFragment();
-      const library = music.library || {};
-      const blocks = [
-        ["In Navidrome", library.songs, "list"],
-        ["Alben in Navidrome", library.albums, "row"],
-        ["Interpreten", music.artists, "row"],
-        ["Alben", music.albums, "row"],
-        ["Titel", music.songs, "list"],
-        ["Podcasts", podcasts.podcasts, "row"],
-        ["Episoden", podcasts.episodes, "list"],
-      ];
-
-      for (const [title, items, layout] of blocks) {
-        if (!items || !items.length) continue;
-        fragment.append(
-          element("div", { class: "section" }, [
-            element("h2", { text: title }),
-            layout === "row" ? element("div", { class: "row" }, items.map(itemCard)) : trackList(items),
-          ])
-        );
-      }
-      if (!fragment.childNodes.length) fragment.append(element("div", { class: "empty", text: "Nichts gefunden." }));
-      results.replaceChildren(fragment);
+      paintSearch(music, podcasts, "all");
     });
 
     $("view").replaceChildren(form, results);
