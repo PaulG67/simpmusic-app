@@ -23,8 +23,8 @@
   <div class="login-card">
     <img src="/static/icons/icon.svg" alt="" width="72" height="72">
     <h1>Music Play</h1>
-    <p>Passwort aus Unraid, Feld «Passwort». Der Benutzername darunter gilt für Amperfy, nicht für dieses Formular.</p>
-    <p class="login-account">Benutzer: <strong id="login-user-label">musicplay</strong></p>
+    <p>Nur das Unraid-Feld «Passwort» eingeben – nicht den Benutzernamen und nicht den Config-Pfad.</p>
+    <p class="login-account">Benutzer: <strong id="login-user-label">musicplay</strong> · Passwort: <strong id="login-pass-len">?</strong> Zeichen · <span id="login-version"></span></p>
     <form id="login-form" method="post" action="/api/login">
       <input type="password" name="password" id="login-password" placeholder="Passwort" autocomplete="current-password" required>
       <button type="submit">Anmelden</button>

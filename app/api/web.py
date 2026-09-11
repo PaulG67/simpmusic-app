@@ -94,14 +94,20 @@ async def login(request: Request):
         payload = {"password": form.get("password")}
 
     password = payload.get("password") or ""
+    entered = web_session.clean_secret(password)
+    expected = settings.subsonic_password
     if not web_session.check_password(password):
         logger.warning(
             "Login fehlgeschlagen: Eingabe {} Zeichen, konfiguriert {} Zeichen",
-            len(web_session.clean_secret(password)),
-            len(settings.subsonic_password),
+            len(entered),
+            len(expected),
+        )
+        detail = (
+            f"Passwort falsch. Eingegeben: {len(entered)} Zeichen, "
+            f"im Container gesetzt: {len(expected)} Zeichen."
         )
         if wants_json:
-            raise HTTPException(status_code=401, detail="Passwort falsch")
+            raise HTTPException(status_code=401, detail=detail)
         return RedirectResponse("/?login=fail", status_code=303)
 
     token = web_session.issue(settings.subsonic_user)

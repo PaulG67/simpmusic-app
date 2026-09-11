@@ -138,6 +138,12 @@
       if ($("login-user-label")) {
         $("login-user-label").textContent = hint.username || "musicplay";
       }
+      if ($("login-pass-len") && hint.passwordLength) {
+        $("login-pass-len").textContent = String(hint.passwordLength);
+      }
+      if ($("login-version") && hint.version) {
+        $("login-version").textContent = "v" + hint.version;
+      }
     } catch (_error) {
       if ($("login-user-label")) $("login-user-label").textContent = "musicplay";
     }
@@ -150,7 +156,7 @@
     try {
       const data = await api("/api/login", {
         method: "POST",
-        body: { password: $("login-password").value },
+        body: { password: $("login-password").value.trim() },
       });
       if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
       $("login").hidden = true;
