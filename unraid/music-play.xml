@@ -26,7 +26,7 @@
     In Amperfy einen Subsonic-Server mit derselben URL, Benutzer und Passwort anlegen.
   </Overview>
   <Category>MediaApp:Music</Category>
-  <WebUI>http://[IP]:[PORT:5060]/</WebUI>
+  <WebUI>http://[IP]:[PORT:5080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/PaulG67/music-play/main/unraid/music-play.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/PaulG67/music-play/main/app/static/icons/icon.svg</Icon>
   <ExtraParams>--memory=2g</ExtraParams>
@@ -37,9 +37,13 @@
   <DonateLink/>
   <Requires/>
 
-  <Config Name="WebUI Port" Target="5060" Default="5060" Mode="tcp"
-          Description="Port fuer Weboberflaeche und Subsonic-API."
-          Type="Port" Display="always" Required="true" Mask="false">5060</Config>
+  <Config Name="WebUI Port" Target="5080" Default="5080" Mode="tcp"
+          Description="Host-Port im Bridge-Netz. Nicht 5060 – Chrome/Edge sperren den SIP-Port (ERR_UNSAFE_PORT)."
+          Type="Port" Display="always" Required="true" Mask="false">5080</Config>
+
+  <Config Name="App-Port" Target="PORT" Default="5080" Mode=""
+          Description="Port im Container. Bei eigener IP (br0) ist das der Port in der URL. 80 = http://IP ohne Port. Nicht 5060."
+          Type="Variable" Display="always" Required="true" Mask="false">5080</Config>
 
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/music-play/config" Mode="rw"
           Description="Datenbank mit Favoriten, Playlists und Wiedergabeverlauf."

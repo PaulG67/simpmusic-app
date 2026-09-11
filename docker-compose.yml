@@ -4,12 +4,13 @@ services:
     build: .
     container_name: music-play
     ports:
-      - "5060:5060"
+      - "5080:5080"
     volumes:
       - ./config:/config
       - ./cache:/cache
       - ./logs:/logs
     environment:
+      PORT: "5080"
       SUBSONIC_USER: musicplay
       SUBSONIC_PASSWORD: changeme
       YTM_LANGUAGE: de

@@ -44,9 +44,13 @@ RUN python -m app.core.icons
 
 VOLUME ["/config", "/cache", "/logs"]
 
-EXPOSE 5060
+ENV PORT=5080
+EXPOSE 5080
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5060/health', timeout=5).status == 200 else 1)"
+    CMD python -c "import os,urllib.request,sys; p=os.environ.get('PORT','5080'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/health', timeout=5).status == 200 else 1)"
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5060"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

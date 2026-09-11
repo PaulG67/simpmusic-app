@@ -49,5 +49,5 @@ echo "In Unraid:"
 echo "  Docker → Container hinzufügen → Template «music-play»"
 echo "  Passwort setzen → Apply"
 echo
-echo "WebUI: http://UNRAID-IP:5060"
+echo "WebUI: http://UNRAID-IP:5080  (bei eigener IP: http://CONTAINER-IP:5080)"
 echo "Updates: Docker → music-play → Force Update"

@@ -123,7 +123,11 @@ Dann in der Unraid-WebUI:
 3. **Passwort** setzen, Rest kann so bleiben
 4. **Apply**
 
-WebUI: `http://<unraid-ip>:5060`
+WebUI: `http://<unraid-ip>:5080`
+
+Port **5060 nicht verwenden**. Chrome und Edge sperren ihn (`ERR_UNSAFE_PORT`, SIP).
+Bei einer eigenen Container-IP (br0) gilt der **App-Port** in der URL, z.B.
+`http://192.168.0.188:5080`. Wer `PORT=80` setzt, kommt mit `http://192.168.0.188` aus.
 
 Anmeldung: Benutzername aus dem Feld **Benutzername** (Standard `musicplay`) und
 Passwort aus dem Feld **Passwort** – nicht aus dem Config-Pfad. Steht das
@@ -152,7 +156,7 @@ Das mitgelieferte Compose-File und Template setzen deshalb 2 GB.
 
 ## iPhone: als App einrichten
 
-1. `http://<unraid-ip>:5060` in Safari öffnen und anmelden.
+1. `http://<unraid-ip>:5080` (oder die eigene Container-IP) in Safari öffnen und anmelden.
 2. Teilen-Symbol → **Zum Home-Bildschirm**.
 
 Ab dann startet sie im Vollbild ohne Safari-Leisten, mit Sperrbildschirm-Steuerung. Für
@@ -166,7 +170,7 @@ In Amperfy → *Login*:
 | Feld | Wert |
 |---|---|
 | Server-Typ | **Subsonic** |
-| URL | `http://<unraid-ip>:5060` (oder deine HTTPS-Adresse) |
+| URL | `http://<unraid-ip>:5080` (oder eigene IP / HTTPS-Adresse) |
 | Benutzername | Wert von `SUBSONIC_USER`, Standard `musicplay` |
 | Passwort | Wert von `SUBSONIC_PASSWORD` |
 
@@ -180,6 +184,7 @@ Alle Werte als Umgebungsvariablen, siehe `.env.example`:
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
+| `PORT` | `5080` | Web- und Subsonic-Port. Nicht 5060 (Chrome: ERR_UNSAFE_PORT) |
 | `SUBSONIC_USER` | `musicplay` | Benutzername für Web und Subsonic |
 | `SUBSONIC_PASSWORD` | `musicplay` | Passwort – unbedingt ändern |
 | `SERVER_URL` | – | Externe Basis-URL hinter einem Reverse Proxy |
