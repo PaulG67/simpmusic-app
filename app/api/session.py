@@ -9,7 +9,7 @@ import hashlib
 import hmac
 
 from fastapi import Request
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer
 
 from app.core.auth_store import password as stored_password
 from app.core.auth_store import password_required
@@ -49,6 +49,6 @@ def read(request: Request) -> str | None:
         return None
     try:
         data = _serializer.loads(token, max_age=MAX_AGE)
-    except (BadSignature, SignatureExpired):
+    except Exception:
         return None
     return data.get("u")

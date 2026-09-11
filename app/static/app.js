@@ -9,6 +9,7 @@
 
   const state = {
     user: null,
+    passwordRequired: false,
     stack: [],
     route: null,
     playlists: [],
@@ -39,7 +40,7 @@
     });
     if (response.status === 401) {
       localStorage.removeItem(TOKEN_KEY);
-      $("login").hidden = false;
+      if (state.passwordRequired) $("login").hidden = false;
       const payload = await response.json().catch(() => ({}));
       const message = typeof payload.detail === "string" ? payload.detail : "Nicht angemeldet";
       throw new Error(message);
@@ -128,24 +129,22 @@
   // ------------------------------------------------------------------ login
 
   async function prefillLogin() {
-    if (new URLSearchParams(location.search).get("login") === "fail") {
-      $("login").hidden = false;
-      $("login-error").textContent = "Passwort falsch";
-      $("login-error").hidden = false;
-    }
     try {
       const hint = await fetch("/api/login-hint", { credentials: "include" }).then((r) => r.json());
+      state.passwordRequired = !!hint.passwordRequired;
       if ($("login-user-label")) {
         $("login-user-label").textContent = hint.username || "musicplay";
       }
-      if ($("login-pass-len") && hint.passwordLength) {
-        $("login-pass-len").textContent = String(hint.passwordLength);
+      if ($("login-pass-len")) {
+        $("login-pass-len").textContent = hint.passwordRequired ? String(hint.passwordLength || "?") : "kein";
       }
       if ($("login-version") && hint.version) {
         $("login-version").textContent = "v" + hint.version;
       }
+      if (!hint.passwordRequired) $("login").hidden = true;
     } catch (_error) {
       if ($("login-user-label")) $("login-user-label").textContent = "musicplay";
+      $("login").hidden = true;
     }
   }
 
@@ -1689,6 +1688,7 @@
 
   async function boot() {
     const session = await api("/api/session");
+    state.passwordRequired = !!session.passwordRequired;
     if (!session.authenticated && session.passwordRequired) {
       $("login").hidden = false;
       return;
@@ -1718,5 +1718,7 @@
   }
 
   prefillLogin();
-  boot().catch(() => ($("login").hidden = false));
+  boot().catch(() => {
+    if (state.passwordRequired) $("login").hidden = false;
+  });
 })();
