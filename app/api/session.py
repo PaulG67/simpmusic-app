@@ -12,10 +12,10 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.core.settings import settings
 
-COOKIE_NAME = "simpmusic_session"
+COOKIE_NAME = "music_play_session"
 MAX_AGE = 60 * 60 * 24 * 90
 
-_serializer = URLSafeTimedSerializer(settings.session_secret, salt="simpmusic-session")
+_serializer = URLSafeTimedSerializer(settings.session_secret, salt="music-play-session")
 
 
 def check_password(password: str) -> bool:

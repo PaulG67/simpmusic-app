@@ -1,6 +1,6 @@
 {
-  "name": "SimpMusic",
-  "short_name": "SimpMusic",
+  "name": "Music Play",
+  "short_name": "Music Play",
   "description": "YouTube Music im Browser - selbst gehostet auf Unraid",
   "id": "/",
   "start_url": "/",

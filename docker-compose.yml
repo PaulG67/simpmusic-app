@@ -1,8 +1,8 @@
 services:
-  simpmusic-app:
-    image: ghcr.io/paulg67/simpmusic-app:latest
+  music-play:
+    image: ghcr.io/paulg67/music-play:latest
     build: .
-    container_name: simpmusic-app
+    container_name: music-play
     ports:
       - "5060:5060"
     volumes:
@@ -10,7 +10,7 @@ services:
       - ./cache:/cache
       - ./logs:/logs
     environment:
-      SUBSONIC_USER: simpmusic
+      SUBSONIC_USER: musicplay
       SUBSONIC_PASSWORD: changeme
       YTM_LANGUAGE: de
       YTM_LOCATION: CH

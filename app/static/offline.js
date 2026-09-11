@@ -8,8 +8,8 @@
 (() => {
   "use strict";
 
-  const AUDIO_CACHE = "simpmusic-audio-v1";
-  const META_KEY = "sm.offline.tracks";
+  const AUDIO_CACHE = "music-play-audio-v1";
+  const META_KEY = "mp.offline.tracks";
 
   const Offline = {
     meta: {},
@@ -82,7 +82,7 @@
 
       if (track.thumbnail) {
         // Same-origin proxy, so the artwork is cacheable too.
-        caches.open("simpmusic-covers-v1").then((covers) =>
+        caches.open("music-play-covers-v1").then((covers) =>
           covers.add(`/api/cover?u=${encodeURIComponent(track.thumbnail)}&size=544`).catch(() => {})
         );
       }
@@ -125,7 +125,7 @@
 
     async clear() {
       await caches.delete(AUDIO_CACHE);
-      await caches.delete("simpmusic-covers-v1");
+      await caches.delete("music-play-covers-v1");
       this.meta = {};
       this.persist();
     },

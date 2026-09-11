@@ -1,16 +1,16 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>simpmusic-app</Name>
-  <Repository>ghcr.io/paulg67/simpmusic-app:latest</Repository>
-  <Registry>https://github.com/users/PaulG67/packages/container/package/simpmusic-app</Registry>
+  <Name>music-play</Name>
+  <Repository>ghcr.io/paulg67/music-play:latest</Repository>
+  <Registry>https://github.com/users/PaulG67/packages/container/package/music-play</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/PaulG67/simpmusic-app/issues</Support>
-  <Project>https://github.com/PaulG67/simpmusic-app</Project>
+  <Support>https://github.com/PaulG67/music-play/issues</Support>
+  <Project>https://github.com/PaulG67/music-play</Project>
   <Overview>
-    SimpMusic-App stellt YouTube Music als selbst gehostete Web-App (PWA) bereit und
+    Music Play stellt YouTube Music als selbst gehostete Web-App (PWA) bereit und
     spricht gleichzeitig die Subsonic-Schnittstelle. Damit laesst sich die Musik im
     Safari auf dem iPhone abspielen und ebenso mit Subsonic-Clients wie Amperfy nutzen.
 
@@ -19,16 +19,16 @@
     Crossfade, Sleep-Timer, SponsorBlock, ReturnYouTubeDislike, Hoerstatistiken und
     Jahresrueckblick. CarPlay kommt ueber Amperfy (Android Auto kann ein Browser nicht).
 
-    Vorlage einmalig auf Unraid: bash /mnt/user/appdata/simpmusic-app/unraid/install-template.sh
-    Danach: Docker → Container hinzufügen → Template simpmusic-app → Passwort setzen → Apply.
+    Vorlage einmalig auf Unraid: bash /mnt/user/appdata/music-play/unraid/install-template.sh
+    Danach: Docker → Container hinzufügen → Template music-play → Passwort setzen → Apply.
 
     Nach dem Start: Weboberflaeche oeffnen, mit SUBSONIC_PASSWORD anmelden.
     In Amperfy einen Subsonic-Server mit derselben URL, Benutzer und Passwort anlegen.
   </Overview>
   <Category>MediaApp:Music</Category>
   <WebUI>http://[IP]:[PORT:5060]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/PaulG67/simpmusic-app/main/unraid/simpmusic-app.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/PaulG67/simpmusic-app/main/app/static/icons/icon.svg</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/PaulG67/music-play/main/unraid/music-play.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/PaulG67/music-play/main/app/static/icons/icon.svg</Icon>
   <ExtraParams>--memory=2g</ExtraParams>
   <PostArgs/>
   <CPUset/>
@@ -41,21 +41,21 @@
           Description="Port fuer Weboberflaeche und Subsonic-API."
           Type="Port" Display="always" Required="true" Mask="false">5060</Config>
 
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/simpmusic-app/config" Mode="rw"
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/music-play/config" Mode="rw"
           Description="Datenbank mit Favoriten, Playlists und Wiedergabeverlauf."
-          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simpmusic-app/config</Config>
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/music-play/config</Config>
 
-  <Config Name="Cache" Target="/cache" Default="/mnt/user/appdata/simpmusic-app/cache" Mode="rw"
+  <Config Name="Cache" Target="/cache" Default="/mnt/user/appdata/music-play/cache" Mode="rw"
           Description="Zwischengespeicherte Audiodateien und Cover."
-          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simpmusic-app/cache</Config>
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/music-play/cache</Config>
 
-  <Config Name="Logs" Target="/logs" Default="/mnt/user/appdata/simpmusic-app/logs" Mode="rw"
+  <Config Name="Logs" Target="/logs" Default="/mnt/user/appdata/music-play/logs" Mode="rw"
           Description="Logdateien."
-          Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/simpmusic-app/logs</Config>
+          Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/music-play/logs</Config>
 
-  <Config Name="Benutzername" Target="SUBSONIC_USER" Default="simpmusic" Mode=""
+  <Config Name="Benutzername" Target="SUBSONIC_USER" Default="musicplay" Mode=""
           Description="Benutzername fuer Weboberflaeche und Amperfy."
-          Type="Variable" Display="always" Required="true" Mask="false">simpmusic</Config>
+          Type="Variable" Display="always" Required="true" Mask="false">musicplay</Config>
 
   <Config Name="Passwort" Target="SUBSONIC_PASSWORD" Default="" Mode=""
           Description="Passwort fuer Weboberflaeche und Amperfy. Unbedingt aendern."

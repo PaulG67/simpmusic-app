@@ -1,4 +1,4 @@
-# SimpMusic-App
+# Music Play
 
 YouTube Music als selbst gehostete Docker-App auf Unraid – bedienbar im Safari auf dem
 iPhone **und** über die Subsonic-Schnittstelle, an die sich [Amperfy](https://github.com/BLeeEZ/amperfy)
@@ -112,31 +112,29 @@ unter **Docker → Container hinzufügen → Template**.
 
 ```bash
 cd /mnt/user/appdata
-git clone https://github.com/PaulG67/simpmusic-app.git
-bash /mnt/user/appdata/simpmusic-app/unraid/install-template.sh
+git clone https://github.com/PaulG67/music-play.git
+bash /mnt/user/appdata/music-play/unraid/install-template.sh
 ```
 
 Dann in der Unraid-WebUI:
 
 1. **Docker → Container hinzufügen**
-2. Oben **Template** → **simpmusic-app** (User Templates)
+2. Oben **Template** → **music-play** (User Templates)
 3. **Passwort** setzen, Rest kann so bleiben
 4. **Apply**
 
 WebUI: `http://<unraid-ip>:5060`
 
-Das Image kommt von `ghcr.io/paulg67/simpmusic-app:latest`. Updates später über
-**Docker → simpmusic-app → Force Update**.
+Das Image kommt von `ghcr.io/paulg67/music-play:latest`. Updates später über
+**Docker → music-play → Force Update**.
 
-Das Container-Paket muss auf GitHub **Public** sein (Repo ist öffentlich, das Paket
-startet trotzdem privat). Einmalig:
-[Package simpmusic-app](https://github.com/PaulG67/simpmusic-app/pkgs/container/simpmusic-app)
+Falls Unraid das Image nicht ziehen kann: [Package music-play](https://github.com/PaulG67/music-play/pkgs/container/music-play)
 → **Package settings → Change visibility → Public**.
 
 ### Optional: Docker Compose
 
 ```bash
-cd /mnt/user/appdata/simpmusic-app
+cd /mnt/user/appdata/music-play
 cp .env.example .env
 docker compose up -d
 ```
@@ -164,7 +162,7 @@ In Amperfy → *Login*:
 |---|---|
 | Server-Typ | **Subsonic** |
 | URL | `http://<unraid-ip>:5060` (oder deine HTTPS-Adresse) |
-| Benutzername | Wert von `SUBSONIC_USER`, Standard `simpmusic` |
+| Benutzername | Wert von `SUBSONIC_USER`, Standard `musicplay` |
 | Passwort | Wert von `SUBSONIC_PASSWORD` |
 
 Die gleichen Angaben stehen in der Weboberfläche unter *Mehr*. Andere Subsonic-Clients
@@ -177,8 +175,8 @@ Alle Werte als Umgebungsvariablen, siehe `.env.example`:
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `SUBSONIC_USER` | `simpmusic` | Benutzername für Web und Subsonic |
-| `SUBSONIC_PASSWORD` | `simpmusic` | Passwort – unbedingt ändern |
+| `SUBSONIC_USER` | `musicplay` | Benutzername für Web und Subsonic |
+| `SUBSONIC_PASSWORD` | `musicplay` | Passwort – unbedingt ändern |
 | `SERVER_URL` | – | Externe Basis-URL hinter einem Reverse Proxy |
 | `YTM_LANGUAGE` / `YTM_LOCATION` | `de` / `CH` | Sprache und Region der Ergebnisse |
 | `STREAM_MODE` | `proxy` | `proxy` oder `redirect` (siehe unten) |
@@ -211,7 +209,7 @@ pip install ytmusicapi
 ytmusicapi browser        # erzeugt browser.json
 ```
 
-Die Datei nach `/mnt/user/appdata/simpmusic-app/config/ytmusic_auth.json` legen und
+Die Datei nach `/mnt/user/appdata/music-play/config/ytmusic_auth.json` legen und
 `YTM_AUTH_FILE=/config/ytmusic_auth.json` setzen. Danach erscheinen die Playlists deines
 Kontos in der Bibliothek und in Amperfy.
 

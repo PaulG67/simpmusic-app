@@ -31,7 +31,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/paulg67/simpmusic-app
+          images: ghcr.io/paulg67/music-play
           tags: |
             type=raw,value=latest
             type=sha,prefix=

@@ -28,7 +28,7 @@ async def lifespan(_: FastAPI):
         settings.subsonic_user,
         settings.stream_mode,
     )
-    if settings.subsonic_password == "simpmusic":
+    if settings.subsonic_password == "musicplay":
         logger.warning("Standardpasswort aktiv - bitte SUBSONIC_PASSWORD setzen")
     yield
     await media.aclose()

@@ -17,7 +17,7 @@ from fastapi.responses import Response
 from app.core.settings import APP_NAME, APP_VERSION, SUBSONIC_API_VERSION
 
 XMLNS = "http://subsonic.org/restapi"
-SERVER_TYPE = "simpmusic-app"
+SERVER_TYPE = "music-play"
 
 ERROR_GENERIC = 0
 ERROR_MISSING_PARAM = 10

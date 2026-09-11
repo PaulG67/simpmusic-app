@@ -24,7 +24,7 @@ RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
 _http = httpx.AsyncClient(
     follow_redirects=True,
     timeout=httpx.Timeout(30.0, read=120.0),
-    headers={"User-Agent": "Mozilla/5.0 (compatible; SimpMusic-App)"},
+    headers={"User-Agent": "Mozilla/5.0 (compatible; Music-Play)"},
 )
 _prefetching: set[str] = set()
 _prefetch_lock = asyncio.Lock()

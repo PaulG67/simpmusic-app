@@ -230,7 +230,7 @@ async def h_ping(request, p, user):
 
 
 async def h_get_license(request, p, user):
-    return {"license": {"valid": True, "email": f"{user}@simpmusic.local", "licenseExpires": "2099-12-31T00:00:00.000Z"}}
+    return {"license": {"valid": True, "email": f"{user}@music-play.local", "licenseExpires": "2099-12-31T00:00:00.000Z"}}
 
 
 async def h_get_open_subsonic_extensions(request, p, user):
@@ -256,7 +256,7 @@ async def h_get_user(request, p, user):
     return {
         "user": {
             "username": user,
-            "email": f"{user}@simpmusic.local",
+            "email": f"{user}@music-play.local",
             "scrobblingEnabled": True,
             "adminRole": False,
             "settingsRole": False,
@@ -557,7 +557,7 @@ async def h_get_now_playing(request, p, user):
         entity["username"] = user
         entity["minutesAgo"] = int((now - played_at).total_seconds() // 60)
         entity["playerId"] = 1
-        entity["playerName"] = event.client or "SimpMusic"
+        entity["playerName"] = event.client or "Music Play"
         songs.append(entity)
 
     return {"nowPlaying": {"entry": songs}}
@@ -831,7 +831,7 @@ async def h_get_play_queue(request, p, user):
             "position": int(queue.position or 0),
             "username": user,
             "changed": iso(queue.changed_at),
-            "changedBy": queue.changed_by or "SimpMusic",
+            "changedBy": queue.changed_by or "Music Play",
             "entry": entries,
         }
     return {"playQueue": payload}
@@ -1091,4 +1091,4 @@ async def _cover_art(p: Params) -> Response:
 
 @router.get("/rest")
 async def rest_root(request: Request) -> Response:
-    return render(request, {"serverInfo": {"name": "SimpMusic-App", "version": APP_VERSION}})
+    return render(request, {"serverInfo": {"name": "Music Play", "version": APP_VERSION}})

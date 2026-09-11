@@ -1,4 +1,4 @@
-/* SimpMusic web player - UI, routing and views.
+/* Music Play web player - UI, routing and views.
    Playback itself lives in player.js, downloads in offline.js. */
 
 (() => {

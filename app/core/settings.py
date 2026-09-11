@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-APP_NAME = "SimpMusic-App"
+APP_NAME = "Music Play"
 APP_VERSION = "1.0.0"
 SUBSONIC_API_VERSION = "1.16.1"
 
@@ -39,13 +39,13 @@ class Settings(BaseModel):
     app_name: str = APP_NAME
     app_version: str = APP_VERSION
 
-    subsonic_user: str = os.getenv("SUBSONIC_USER", "simpmusic")
-    subsonic_password: str = os.getenv("SUBSONIC_PASSWORD", "simpmusic")
+    subsonic_user: str = os.getenv("SUBSONIC_USER", "musicplay")
+    subsonic_password: str = os.getenv("SUBSONIC_PASSWORD", "musicplay")
     session_secret: str = ""
 
     server_url: str = os.getenv("SERVER_URL", "").rstrip("/")
 
-    database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{CONFIG_DIR / 'simpmusic.db'}")
+    database_url: str = os.getenv("DATABASE_URL", f"sqlite:///{CONFIG_DIR / 'music-play.db'}")
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
     ytm_language: str = os.getenv("YTM_LANGUAGE", "de")

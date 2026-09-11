@@ -4,9 +4,9 @@
    ranges - so downloaded tracks are stored as one complete response and sliced
    here into 206 replies. */
 
-const SHELL_CACHE = "simpmusic-shell-v2";
-const AUDIO_CACHE = "simpmusic-audio-v1";
-const COVER_CACHE = "simpmusic-covers-v1";
+const SHELL_CACHE = "music-play-shell-v1";
+const AUDIO_CACHE = "music-play-audio-v1";
+const COVER_CACHE = "music-play-covers-v1";
 
 const SHELL_FILES = [
   "/",
